@@ -2,7 +2,11 @@
 
 A real-time Linux process performance dashboard. Select any running process, watch its metrics update live, and get plain-English explanations for every number — including what "good" and "bad" look like, why a problem occurs, and what to do about it.
 
-![PerfWatch dashboard showing process metrics](https://img.shields.io/badge/python-3.8%2B-blue) ![psutil](https://img.shields.io/badge/psutil-7.x-green) ![no dependencies](https://img.shields.io/badge/extra%20deps-none-lightgrey)
+![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue) ![psutil](https://img.shields.io/badge/psutil-7.x-green) ![no dependencies](https://img.shields.io/badge/extra%20deps-none-lightgrey)
+
+![PerfWatch landing page showing the stressor panel and live system strip](screenshots/landing.png)
+
+![PerfWatch metrics dashboard monitoring a CPU stressor process](screenshots/metrics.png)
 
 ---
 
