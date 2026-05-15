@@ -1,0 +1,2034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PerfWatch</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0d1117;
+  --bg2:       #161b22;
+  --bg3:       #21262d;
+  --border:    #30363d;
+  --text:      #e6edf3;
+  --text-dim:  #8b949e;
+  --text-dimmer: #484f58;
+  --good:      #3fb950;
+  --info:      #58a6ff;
+  --warning:   #d29922;
+  --danger:    #f85149;
+  --accent:    #58a6ff;
+  --font:      'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--accent);
+}
+.logo span { color: var(--text-dim); font-weight: 400; }
+
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-dimmer);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.status-dot.live { background: var(--good); box-shadow: 0 0 6px var(--good); animation: pulse 2s infinite; }
+.status-dot.error { background: var(--danger); }
+
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+#status-text { font-size: 14px; color: var(--text-dim); }
+
+/* ── Layout ── */
+.layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 300px;
+  min-width: 220px;
+  max-width: 360px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.sidebar-header {
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.search-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+input[type=text], input[type=search] {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 14px;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+input:focus { border-color: var(--accent); }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Toggle switch */
+.toggle {
+  position: relative;
+  width: 34px; height: 18px; flex-shrink: 0;
+}
+.toggle input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute; inset: 0;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.slider::before {
+  content: '';
+  position: absolute;
+  width: 12px; height: 12px;
+  left: 2px; top: 2px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+.toggle input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+.toggle input:checked + .slider::before { transform: translateX(16px); background: #fff; }
+
+.process-count {
+  font-size: 13px;
+  color: var(--text-dimmer);
+  padding: 6px 14px 4px;
+}
+
+.process-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.process-list::-webkit-scrollbar { width: 4px; }
+.process-list::-webkit-scrollbar-track { background: transparent; }
+.process-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.proc-item {
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-left: 3px solid transparent;
+}
+.proc-item:hover { background: var(--bg3); }
+.proc-item.selected {
+  background: rgba(88,166,255,0.1);
+  border-left-color: var(--accent);
+}
+
+.proc-name {
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.proc-meta {
+  font-size: 13px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+  font-family: var(--font);
+}
+
+.proc-status-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 6px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.badge-running { background: rgba(63,185,80,0.15); color: var(--good); }
+.badge-sleeping { background: rgba(88,166,255,0.1); color: var(--info); }
+.badge-zombie { background: rgba(248,81,73,0.15); color: var(--danger); }
+.badge-other { background: var(--bg3); color: var(--text-dim); }
+
+/* ── Main panel ── */
+.main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.main::-webkit-scrollbar { width: 6px; }
+.main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* Placeholder */
+.placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-dimmer);
+  text-align: center;
+}
+.placeholder-icon { font-size: 48px; opacity: 0.3; }
+.placeholder h2 { font-size: 20px; color: var(--text-dim); font-weight: 500; }
+.placeholder p { font-size: 14px; max-width: 300px; line-height: 1.5; }
+
+/* Process info bar */
+.proc-info-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.proc-info-bar .proc-pid {
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text-dim);
+  background: var(--bg3);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.proc-info-bar .proc-name-big { font-weight: 600; font-size: 17px; }
+.proc-info-bar .proc-cmd-big {
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text-dim);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.refresh-time { font-size: 12px; color: var(--text-dimmer); margin-left: auto; white-space: nowrap; }
+
+/* ── Metric grid ── */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+}
+
+/* ── Metric card ── */
+.metric-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.metric-card.severity-good    { border-left: 3px solid var(--good); }
+.metric-card.severity-info    { border-left: 3px solid var(--info); }
+.metric-card.severity-warning { border-left: 3px solid var(--warning); }
+.metric-card.severity-danger  { border-left: 3px solid var(--danger); }
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+  gap: 8px;
+}
+.card-label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+}
+.card-status {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.status-good    { background: rgba(63,185,80,0.15);  color: var(--good); }
+.status-info    { background: rgba(88,166,255,0.1);  color: var(--info); }
+.status-warning { background: rgba(210,153,34,0.15); color: var(--warning); }
+.status-danger  { background: rgba(248,81,73,0.15);  color: var(--danger); }
+
+.card-body { padding: 0 14px 14px; }
+
+.card-value {
+  font-family: var(--font);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.card-value .unit {
+  font-size: 16px;
+  color: var(--text-dim);
+  font-weight: 400;
+  margin-left: 4px;
+}
+.card-sub {
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+
+/* Progress bar */
+.bar-wrap {
+  height: 6px;
+  background: var(--bg3);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 8px 0 10px;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.bar-good    { background: var(--good); }
+.bar-info    { background: var(--info); }
+.bar-warning { background: var(--warning); }
+.bar-danger  { background: var(--danger); }
+
+/* Description */
+.card-description {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin-bottom: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+/* Advice */
+.card-advice {
+  margin-top: 6px;
+}
+.advice-toggle {
+  font-size: 13px;
+  color: var(--accent);
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.advice-toggle:hover { text-decoration: underline; }
+.advice-chevron { transition: transform 0.2s; display: inline-block; }
+.advice-chevron.open { transform: rotate(90deg); }
+
+.advice-list {
+  margin-top: 8px;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+}
+.advice-list.open { display: flex; }
+.advice-item {
+  font-size: 13px;
+  color: var(--text-dim);
+  background: var(--bg3);
+  border-radius: 6px;
+  padding: 7px 10px;
+  line-height: 1.5;
+  border-left: 2px solid var(--border);
+}
+.advice-item code {
+  font-family: var(--font);
+  font-size: 12px;
+  background: rgba(255,255,255,0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* Stats table inside a card */
+.stat-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font);
+  font-size: 13px;
+}
+.stat-table td {
+  padding: 3px 0;
+  vertical-align: top;
+}
+.stat-table td:first-child {
+  color: var(--text-dim);
+  width: 50%;
+  padding-right: 8px;
+}
+.stat-table td:last-child { color: var(--text); font-weight: 500; }
+
+/* Open files list */
+.file-list {
+  font-family: var(--font);
+  font-size: 12px;
+  color: var(--text-dim);
+  max-height: 80px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+.file-list div {
+  padding: 1px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Error banner */
+.error-banner {
+  background: rgba(248,81,73,0.1);
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  padding: 14px 16px;
+  color: var(--danger);
+  font-size: 14px;
+}
+
+/* ── Stressor panel ── */
+.stressor-header {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  transition: background 0.1s;
+}
+.stressor-header:hover { background: var(--bg3); }
+
+.stressor-chevron {
+  color: var(--text-dimmer);
+  font-size: 15px;
+  transition: transform 0.2s;
+  display: inline-block;
+  line-height: 1;
+}
+.stressor-chevron.open { transform: rotate(90deg); }
+
+.stressor-header .sidebar-title { margin: 0; flex: 1; }
+
+.stressor-run-count {
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(88,166,255,0.15);
+  color: var(--accent);
+  padding: 1px 7px;
+  border-radius: 10px;
+  display: none;
+}
+.stressor-run-count.visible { display: inline-block; }
+
+.stressor-body {
+  flex-shrink: 0;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.25s ease;
+}
+
+.stressor-list {
+  padding: 4px 0 6px;
+}
+
+.stressor-item {
+  padding: 7px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: background 0.1s;
+}
+.stressor-item:hover { background: var(--bg3); }
+
+.stressor-item-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.stressor-dot {
+  font-size: 9px;
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-dimmer);
+  margin-top: 1px;
+}
+.stressor-dot.running {
+  background: var(--good);
+  box-shadow: 0 0 5px var(--good);
+  animation: pulse 2s infinite;
+}
+
+.stressor-name {
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stressor-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  background: transparent;
+}
+.stressor-btn:active { transform: scale(0.95); }
+.stressor-btn.start {
+  border-color: var(--good);
+  color: var(--good);
+}
+.stressor-btn.start:hover { background: rgba(63,185,80,0.12); }
+.stressor-btn.stop {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.stressor-btn.stop:hover { background: rgba(248,81,73,0.12); }
+.stressor-btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+
+.stressor-desc {
+  font-size: 13px;
+  color: var(--text-dimmer);
+  padding-left: 16px;
+  line-height: 1.45;
+}
+
+/* ── Info button ── */
+.stressor-info-btn {
+  flex-shrink: 0;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--text-dimmer);
+  color: var(--text-dimmer);
+  font-size: 11px;
+  font-weight: 700;
+  font-style: italic;
+  cursor: pointer;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, color 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+.stressor-info-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Info modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.modal-overlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+.modal {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  max-width: 500px;
+  width: calc(100% - 40px);
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  transform: translateY(10px);
+  transition: transform 0.15s;
+}
+.modal-overlay.open .modal { transform: translateY(0); }
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-icon { font-size: 26px; line-height: 1; flex-shrink: 0; }
+.modal-title-block { flex: 1; }
+.modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.modal-subtitle { font-size: 13px; color: var(--text-dim); }
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dimmer);
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.modal-close:hover { color: var(--text); background: var(--bg3); }
+
+.modal-body { padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+.modal-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--text-dimmer);
+  margin-bottom: 5px;
+}
+.modal-text { font-size: 14px; color: var(--text-dim); line-height: 1.6; }
+
+.modal-expect-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 2px;
+}
+.modal-expect-item {
+  font-size: 13px;
+  color: var(--text-dim);
+  background: var(--bg3);
+  border-radius: 6px;
+  padding: 7px 10px;
+  line-height: 1.5;
+  border-left: 2px solid var(--accent);
+}
+
+.modal-safety {
+  font-size: 13px;
+  color: var(--good);
+  background: rgba(63,185,80,0.08);
+  border: 1px solid rgba(63,185,80,0.2);
+  border-radius: 6px;
+  padding: 8px 12px;
+  line-height: 1.5;
+}
+
+.stressor-pid-link {
+  font-size: 13px;
+  color: var(--accent);
+  padding-left: 16px;
+  cursor: pointer;
+  font-family: var(--font);
+}
+.stressor-pid-link:hover { text-decoration: underline; }
+
+/* ── Process command tooltip ── */
+.proc-tooltip {
+  position: fixed;
+  z-index: 200;
+  background: #090d12;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 11px;
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text);
+  max-width: 480px;
+  word-break: break-all;
+  line-height: 1.6;
+  pointer-events: none;
+  white-space: pre-wrap;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+  opacity: 0;
+  transition: opacity 0.08s;
+}
+.proc-tooltip.visible { opacity: 1; }
+
+/* ── System strip ── */
+.sys-strip {
+  flex-shrink: 0;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 5px 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 12px;
+  overflow-x: auto;
+  min-height: 34px;
+}
+.sys-strip::-webkit-scrollbar { height: 0; }
+.sys-strip-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sys-strip-label {
+  color: var(--text-dimmer);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.sys-strip-value {
+  color: var(--text);
+  font-family: var(--font);
+}
+.sys-strip-value.warning { color: var(--warning); }
+.sys-strip-value.danger  { color: var(--danger); }
+.sys-strip-sep { color: var(--border); }
+.core-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 18px;
+}
+.core-bar {
+  width: 6px;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--good);
+  transition: height 0.4s ease;
+}
+.core-bar.warning { background: var(--warning); }
+.core-bar.danger  { background: var(--danger); }
+
+/* ── Sparkline ── */
+.sparkline-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+  font-family: var(--font);
+}
+
+/* ── Resource limits table ── */
+.rlimit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font);
+  font-size: 12px;
+}
+.rlimit-table th {
+  text-align: left;
+  color: var(--text-dimmer);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 0 0 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+.rlimit-table th:not(:first-child) { text-align: right; padding-right: 4px; }
+.rlimit-table td {
+  padding: 3px 0;
+  color: var(--text-dim);
+  vertical-align: middle;
+}
+.rlimit-table td:first-child { color: var(--text); }
+.rlimit-table td:not(:first-child) { text-align: right; padding-right: 4px; }
+.rlimit-unlimited { color: var(--text-dimmer); }
+
+/* ── Perf warn icon ── */
+.perf-warn-icon {
+  background: transparent;
+  border: none;
+  cursor: help;
+  font-size: 15px;
+  color: var(--warning);
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: transform 0.15s, opacity 0.15s;
+}
+.perf-warn-icon:hover { transform: scale(1.25); opacity: 0.85; }
+
+/* ── Perf unavailable card body ── */
+.perf-unavail {
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+.perf-fix-cmd {
+  font-family: var(--font);
+  font-size: 12px;
+  background: var(--bg3);
+  padding: 6px 10px;
+  border-radius: 5px;
+  margin-top: 6px;
+  color: var(--text);
+  word-break: break-all;
+}
+
+/* Responsive */
+@media (max-width: 720px) {
+  .sidebar { width: 220px; }
+  .metrics-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Perf<span>Watch</span></div>
+  <div class="status-dot" id="status-dot"></div>
+  <div id="status-text">Select a process to begin monitoring</div>
+</header>
+
+<div class="sys-strip" id="sys-strip">
+  <div class="sys-strip-item">
+    <span class="sys-strip-label">System</span>
+    <span class="sys-strip-value" style="color:var(--text-dimmer)">Loading…</span>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <!-- Stressor control panel — at top for visibility -->
+    <div class="stressor-header" id="stressor-toggle">
+      <span class="stressor-chevron open" id="stressor-chevron">›</span>
+      <span class="sidebar-title">Test Stressors</span>
+      <span class="stressor-run-count" id="stressor-run-count"></span>
+    </div>
+    <div class="stressor-body" id="stressor-body">
+      <div class="stressor-list" id="stressor-list"></div>
+    </div>
+
+    <!-- Process list -->
+    <div class="sidebar-header">
+      <div class="sidebar-title">Processes</div>
+      <div class="search-row">
+        <input type="search" id="search-input" placeholder="Filter by name or command…" autocomplete="off">
+      </div>
+      <label class="toggle-row" title="Hide root/daemon/system service processes">
+        <label class="toggle">
+          <input type="checkbox" id="hide-system">
+          <span class="slider"></span>
+        </label>
+        Hide system processes
+      </label>
+    </div>
+    <div class="process-count" id="proc-count"></div>
+    <div class="process-list" id="proc-list"></div>
+
+  </aside>
+
+  <!-- Main panel -->
+  <main class="main" id="main">
+    <div class="placeholder">
+      <div class="placeholder-icon">📊</div>
+      <h2>No process selected</h2>
+      <p>Pick a process from the left panel to start live metric collection.</p>
+    </div>
+  </main>
+
+</div>
+
+<!-- Process command tooltip -->
+<div class="proc-tooltip" id="proc-tooltip"></div>
+
+<!-- Metric card tooltip (perf warn icon, etc.) -->
+<div class="proc-tooltip" id="metric-tooltip"></div>
+
+<!-- Stressor info modal — must be in DOM before the script block runs -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal" role="dialog" aria-modal="true">
+    <div class="modal-header">
+      <div class="modal-icon" id="modal-icon"></div>
+      <div class="modal-title-block">
+        <div class="modal-title" id="modal-title"></div>
+        <div class="modal-subtitle" id="modal-subtitle"></div>
+      </div>
+      <button class="modal-close" id="modal-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div>
+        <div class="modal-section-label">What it does</div>
+        <div class="modal-text" id="modal-what"></div>
+      </div>
+      <div>
+        <div class="modal-section-label">How it works</div>
+        <div class="modal-text" id="modal-how"></div>
+      </div>
+      <div>
+        <div class="modal-section-label">What to expect in the dashboard</div>
+        <div class="modal-expect-list" id="modal-expect"></div>
+      </div>
+      <div class="modal-safety" id="modal-safety"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+let selectedPid = null;
+let selectedProc = null;
+let sse = null;
+let sysSSE = null;
+let sysMetrics = null;
+let perfData = null;
+let perfTimer = null;
+let searchTimer = null;
+let lastUpdate = null;
+const HISTORY_LEN = 60;
+const metricHistory = {};
+
+function pushHistory(key, value) {
+  if (!metricHistory[key]) metricHistory[key] = [];
+  metricHistory[key].push(value);
+  if (metricHistory[key].length > HISTORY_LEN) metricHistory[key].shift();
+}
+
+const $ = id => document.getElementById(id);
+
+// ── Process list ───────────────────────────────────────────────────
+
+async function loadProcesses() {
+  const q = $('search-input').value.trim();
+  const sys = $('hide-system').checked ? '0' : '1';
+  const url = `/api/processes?system=${sys}&q=${encodeURIComponent(q)}`;
+  try {
+    const res = await fetch(url);
+    const procs = await res.json();
+    renderProcessList(procs);
+  } catch(e) {
+    $('proc-list').innerHTML = `<div style="padding:14px;color:var(--danger);font-size:13px;">Failed to load process list</div>`;
+  }
+}
+
+function renderProcessList(procs) {
+  $('proc-count').textContent = `${procs.length} process${procs.length !== 1 ? 'es' : ''}`;
+  const html = procs.map(p => {
+    const sel = p.pid === selectedPid ? 'selected' : '';
+    const statusClass = {running:'badge-running', sleeping:'badge-sleeping', zombie:'badge-zombie'}[p.status] || 'badge-other';
+    return `
+      <div class="proc-item ${sel}" data-pid="${p.pid}" data-name="${esc(p.name)}" data-cmd="${esc(p.cmd)}" data-user="${esc(p.username)}" data-full-cmd="${esc(p.full_cmd || p.cmd)}">
+        <div class="proc-name">
+          ${esc(p.name)}
+          <span class="proc-status-badge ${statusClass}">${p.status}</span>
+        </div>
+        <div class="proc-meta">PID ${p.pid} · ${esc(p.username || '?')} · ${esc(p.cmd.substring(0,50))}</div>
+      </div>`;
+  }).join('');
+  $('proc-list').innerHTML = html || `<div style="padding:14px;color:var(--text-dimmer);font-size:13px;">No matching processes</div>`;
+
+  $('proc-list').querySelectorAll('.proc-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const pid = +el.dataset.pid;
+      selectProcess(pid, { name: el.dataset.name, cmd: el.dataset.cmd, username: el.dataset.user });
+    });
+  });
+}
+
+// ── Process command tooltip (event-delegated — wired once, not per-render) ──
+(function () {
+  const tip  = $('proc-tooltip');
+  const list = $('proc-list');
+  if (!tip || !list) return;
+
+  function position(e) {
+    const pad = 14;
+    const tw  = tip.offsetWidth  || 300;
+    const th  = tip.offsetHeight || 60;
+    let x = e.clientX + 16;
+    let y = e.clientY + 16;
+    // Clamp so tooltip never goes off-screen
+    if (x + tw > window.innerWidth  - pad) x = e.clientX - tw - 8;
+    if (y + th > window.innerHeight - pad) y = e.clientY - th - 8;
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
+  }
+
+  list.addEventListener('mousemove', e => {
+    const item = e.target.closest('.proc-item');
+    if (!item) return;
+    position(e);
+  });
+
+  list.addEventListener('mouseover', e => {
+    const item = e.target.closest('.proc-item');
+    if (!item) { tip.classList.remove('visible'); return; }
+    const cmd = item.dataset.fullCmd || '';
+    if (!cmd) { tip.classList.remove('visible'); return; }
+    tip.textContent = cmd;
+    tip.classList.add('visible');
+    position(e);
+  });
+
+  list.addEventListener('mouseout', e => {
+    if (!e.target.closest('.proc-item')) return;
+    // Only hide if we've truly left the proc-list area
+    if (!e.relatedTarget || !e.relatedTarget.closest('.proc-item')) {
+      tip.classList.remove('visible');
+    }
+  });
+
+  // Always hide when mouse leaves the sidebar entirely
+  document.getElementById('proc-list').closest('.sidebar')
+    .addEventListener('mouseleave', () => tip.classList.remove('visible'));
+})();
+
+// ── Metric card tooltip (delegated on document — covers dynamically created cards) ──
+(function () {
+  const tip = $('metric-tooltip');
+  if (!tip) return;
+
+  function pos(e) {
+    const pad = 14;
+    const tw  = tip.offsetWidth  || 300;
+    const th  = tip.offsetHeight || 80;
+    let x = e.clientX + 14;
+    let y = e.clientY + 14;
+    if (x + tw > window.innerWidth  - pad) x = e.clientX - tw - 8;
+    if (y + th > window.innerHeight - pad) y = e.clientY - th - 8;
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
+  }
+
+  document.addEventListener('mouseover', e => {
+    const btn = e.target.closest('.perf-warn-icon');
+    if (!btn) return;
+    tip.textContent = btn.dataset.tip || '';
+    tip.classList.add('visible');
+    pos(e);
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!tip.classList.contains('visible')) return;
+    if (e.target.closest('.perf-warn-icon')) pos(e);
+  });
+
+  document.addEventListener('mouseout', e => {
+    if (!e.target.closest('.perf-warn-icon')) return;
+    const to = e.relatedTarget;
+    if (to && to.closest && to.closest('.perf-warn-icon')) return;
+    tip.classList.remove('visible');
+  });
+})();
+
+function selectProcess(pid, info) {
+  selectedPid = pid;
+  selectedProc = { pid, ...info };
+
+  // Update sidebar selection
+  $('proc-list').querySelectorAll('.proc-item').forEach(el => {
+    el.classList.toggle('selected', +el.dataset.pid === pid);
+  });
+
+  startSSE(pid);
+}
+
+// ── SSE stream ─────────────────────────────────────────────────────
+
+function startSSE(pid) {
+  if (sse) { sse.close(); sse = null; }
+
+  // Reset per-process state for the new selection
+  Object.keys(metricHistory).forEach(k => delete metricHistory[k]);
+  perfData = null;
+  if (perfTimer) { clearInterval(perfTimer); perfTimer = null; }
+
+  setStatus('connecting', 'Connecting…');
+  renderProcessHeader();
+
+  sse = new EventSource(`/api/metrics?pid=${pid}`);
+
+  sse.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.error) {
+      sse.close(); sse = null;
+      showPlaceholder();
+      loadProcesses();
+      loadStressors();
+      return;
+    }
+    lastUpdate = new Date();
+    setStatus('live', `Monitoring PID ${pid}`);
+    renderMetrics(data);
+  };
+
+  sse.onerror = () => {
+    setStatus('error', 'Connection lost — retrying…');
+  };
+
+  // Fetch perf counters asynchronously (takes ~1s); refresh every 30s
+  fetchPerfCounters(pid);
+  perfTimer = setInterval(() => {
+    if (selectedPid === pid) fetchPerfCounters(pid);
+    else { clearInterval(perfTimer); perfTimer = null; }
+  }, 30000);
+}
+
+function setStatus(state, text) {
+  const dot = $('status-dot');
+  dot.className = 'status-dot';
+  if (state === 'live') dot.classList.add('live');
+  else if (state === 'error') dot.classList.add('error');
+  $('status-text').textContent = text;
+}
+
+// ── Render helpers ─────────────────────────────────────────────────
+
+function renderProcessHeader() {
+  const p = selectedProc;
+  $('main').innerHTML = `
+    <div class="proc-info-bar">
+      <span class="proc-name-big">${esc(p.name)}</span>
+      <span class="proc-pid">PID ${p.pid}</span>
+      <span class="proc-cmd-big">${esc(p.cmd || '')}</span>
+      <span class="refresh-time" id="refresh-time">Loading…</span>
+    </div>
+    <div class="metrics-grid" id="metrics-grid"></div>
+  `;
+}
+
+function showPlaceholder() {
+  selectedPid  = null;
+  selectedProc = null;
+  setStatus('idle', 'Select a process to begin monitoring');
+  $('main').innerHTML = `
+    <div class="placeholder">
+      <div class="placeholder-icon">📊</div>
+      <h2>No process selected</h2>
+      <p>Pick a process from the left panel to start live metric collection.</p>
+    </div>`;
+  // Deselect any highlighted item in the sidebar
+  $('proc-list').querySelectorAll('.proc-item').forEach(el => el.classList.remove('selected'));
+}
+
+function renderError(msg) {
+  $('main').innerHTML = `<div class="error-banner">⚠ ${esc(msg)}</div>`;
+}
+
+function renderMetrics(data) {
+  if (!$('metrics-grid')) renderProcessHeader();
+  const rt = $('refresh-time');
+  if (rt && lastUpdate) rt.textContent = `Updated ${lastUpdate.toLocaleTimeString()}`;
+
+  // Track history for sparklines
+  if (data.cpu)         pushHistory('cpu', data.cpu.value);
+  if (data.memory)      pushHistory('mem_pct', data.memory.percent);
+  if (data.cpu_times)   pushHistory('cpu_sys_pct', data.cpu_times.sys_pct || 0);
+  if (data.page_faults) pushHistory('page_faults_major', data.page_faults.major);
+
+  const grid = $('metrics-grid');
+  const cards = [];
+
+  if (data.cpu)           cards.push(renderCPU(data.cpu));
+  if (data.memory)        cards.push(renderMemory(data.memory));
+  if (data.system_memory) cards.push(renderSysMem(data.system_memory));
+  if (data.cpu_times)     cards.push(renderCPUTimes(data.cpu_times));
+  if (data.page_faults)   cards.push(renderPageFaults(data.page_faults));
+  if (data.uptime)        cards.push(renderUptime(data.uptime));
+  if (data.threads)       cards.push(renderThreads(data.threads));
+  if (data.fds)           cards.push(renderFDs(data.fds));
+  if (data.connections)   cards.push(renderConnections(data.connections));
+  if (data.ctx_switches)  cards.push(renderCtxSwitches(data.ctx_switches));
+  if (data.priority)      cards.push(renderPriority(data.priority));
+  if (data.io)            cards.push(renderIO(data.io));
+  if (data.open_files)    cards.push(renderOpenFiles(data.open_files));
+  if (data.rlimits)       cards.push(renderRlimits(data.rlimits));
+  if (sysMetrics) {
+    const dh = renderDiskRates(sysMetrics.disk_rates); if (dh) cards.push(dh);
+    const nh = renderNetRates(sysMetrics.net_rates);   if (nh) cards.push(nh);
+  }
+  if (perfData !== null) cards.push(renderPerfCard(perfData));
+
+  // Diff-update: replace only changed cards
+  const existing = [...grid.children];
+  if (existing.length !== cards.length) {
+    grid.innerHTML = cards.join('');
+    grid.querySelectorAll('.advice-toggle').forEach(wireAdviceToggle);
+  } else {
+    cards.forEach((html, i) => {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const newCard = tmp.firstElementChild;
+      const oldCard = existing[i];
+      // Only replace if severity changed (avoid thrash)
+      if (oldCard.className !== newCard.className || !oldCard.querySelector('.card-value')) {
+        grid.replaceChild(newCard, oldCard);
+        newCard.querySelectorAll('.advice-toggle').forEach(wireAdviceToggle);
+      } else {
+        // Patch values in-place
+        patchCard(oldCard, newCard);
+      }
+    });
+  }
+}
+
+function patchCard(old, next) {
+  const selectors = ['.card-value', '.card-sub', '.card-status', '.bar-fill', '.stat-table'];
+  selectors.forEach(sel => {
+    const o = old.querySelector(sel);
+    const n = next.querySelector(sel);
+    if (o && n) {
+      if (sel === '.bar-fill') {
+        o.style.width = n.style.width;
+        o.className = n.className;
+      } else if (o.innerHTML !== n.innerHTML) {
+        o.innerHTML = n.innerHTML;
+      }
+    }
+  });
+  const oldStatus = old.querySelector('.card-status');
+  const newStatus = next.querySelector('.card-status');
+  if (oldStatus && newStatus) {
+    oldStatus.className = newStatus.className;
+    oldStatus.textContent = newStatus.textContent;
+  }
+}
+
+function wireAdviceToggle(btn) {
+  btn.addEventListener('click', () => {
+    const list = btn.closest('.card-advice').querySelector('.advice-list');
+    const chev = btn.querySelector('.advice-chevron');
+    list.classList.toggle('open');
+    chev.classList.toggle('open');
+    btn.querySelector('.toggle-text').textContent = list.classList.contains('open') ? 'Hide advice' : 'Show advice & commands';
+  });
+}
+
+// ── Individual card renderers ──────────────────────────────────────
+
+function card(severity, label, status, valueHtml, subHtml, barPct, description, advice) {
+  const barColor = severity === 'good' ? 'bar-good' : severity === 'info' ? 'bar-info' : severity === 'warning' ? 'bar-warning' : 'bar-danger';
+  const statusClass = severity === 'good' ? 'status-good' : severity === 'info' ? 'status-info' : severity === 'warning' ? 'status-warning' : 'status-danger';
+  const barHtml = barPct !== null ? `<div class="bar-wrap"><div class="bar-fill ${barColor}" style="width:${clamp(barPct,0,100)}%"></div></div>` : '';
+  const adviceHtml = advice && advice.length ? `
+    <div class="card-advice">
+      <span class="advice-toggle">
+        <span class="advice-chevron">›</span>
+        <span class="toggle-text">Show advice &amp; commands</span>
+      </span>
+      <div class="advice-list">
+        ${advice.map(a => `<div class="advice-item">${linkifyCode(esc(a))}</div>`).join('')}
+      </div>
+    </div>` : '';
+  return `
+    <div class="metric-card severity-${severity}">
+      <div class="card-header">
+        <div class="card-label">${label}</div>
+        <div class="card-status ${statusClass}">${status}</div>
+      </div>
+      <div class="card-body">
+        <div class="card-value">${valueHtml}</div>
+        ${subHtml ? `<div class="card-sub">${subHtml}</div>` : ''}
+        ${barHtml}
+        <div class="card-description">${esc(description)}</div>
+        ${adviceHtml}
+      </div>
+    </div>`;
+}
+
+function renderCPU(d) {
+  const v = d.value.toFixed(1);
+  const hist = metricHistory['cpu'] || [];
+  const sc = d.severity === 'danger' ? 'var(--danger)' : d.severity === 'warning' ? 'var(--warning)' : 'var(--good)';
+  const spark = hist.length > 2 ? sparkline(hist, 80, 20, sc) : '';
+  const sub = spark
+    ? `<div class="sparkline-wrap">${spark}<span>${d.num_cores} logical cores</span></div>`
+    : `${d.num_cores} logical cores available`;
+  return card(d.severity, d.label, d.status,
+    `${v}<span class="unit">%</span>`,
+    sub, d.value, d.description, d.advice);
+}
+
+function renderMemory(d) {
+  const rss = fmtBytes(d.rss), vms = fmtBytes(d.vms);
+  const hist = metricHistory['mem_pct'] || [];
+  const sc = d.severity === 'danger' ? 'var(--danger)' : d.severity === 'warning' ? 'var(--warning)' : 'var(--good)';
+  const spark = hist.length > 2 ? sparkline(hist, 80, 20, sc) : '';
+  const sub = spark
+    ? `<div class="sparkline-wrap">${spark}<span>RSS ${rss} · VMS ${vms}</span></div>`
+    : `RSS ${rss} · VMS ${vms}`;
+  return card(d.severity, d.label, d.status,
+    `${d.percent.toFixed(1)}<span class="unit">% RAM</span>`,
+    sub, d.percent, d.description, d.advice);
+}
+
+function renderSysMem(d) {
+  const used = fmtBytes(d.used), total = fmtBytes(d.total);
+  const swapHtml = d.swap_total > 0
+    ? `RAM ${d.percent}% · Swap ${d.swap_percent.toFixed(1)}% (${fmtBytes(d.swap_used)} / ${fmtBytes(d.swap_total)})`
+    : `RAM ${d.percent}% used · ${fmtBytes(d.available)} available · No swap`;
+  return card(d.severity, d.label, d.status,
+    `${d.percent}<span class="unit">%</span>`,
+    swapHtml,
+    d.percent,
+    d.description, d.advice);
+}
+
+function renderThreads(d) {
+  return card(d.severity, d.label, d.status,
+    `${d.value}<span class="unit">threads</span>`,
+    null,
+    Math.min(d.value / 2, 100),
+    d.description, d.advice);
+}
+
+function renderFDs(d) {
+  return card(d.severity, d.label, d.status,
+    `${d.value}<span class="unit">/ ${d.limit}</span>`,
+    `${d.percent_of_limit}% of process limit`,
+    d.percent_of_limit,
+    d.description, d.advice);
+}
+
+function renderConnections(d) {
+  const rows = Object.entries(d.by_state || {})
+    .sort((a,b) => b[1]-a[1])
+    .map(([s,n]) => `<tr><td>${s}</td><td>${n}</td></tr>`).join('');
+  const sub = `<table class="stat-table">${rows}</table>`;
+  return card(d.severity, d.label, d.status,
+    `${d.total}<span class="unit">sockets</span>`,
+    sub,
+    Math.min(d.total / 10, 100),
+    d.description, d.advice);
+}
+
+function renderCtxSwitches(d) {
+  const total = d.voluntary + d.involuntary;
+  return card(d.severity, d.label, d.status,
+    `${fmtNum(total)}<span class="unit">total</span>`,
+    `Voluntary ${fmtNum(d.voluntary)} · Involuntary ${fmtNum(d.involuntary)}`,
+    Math.min(d.involuntary / 100, 100),
+    d.description, d.advice);
+}
+
+function renderPriority(d) {
+  const bar = (d.nice + 20) / 39 * 100;  // map -20..19 to 0..100
+  return card(d.severity, d.label, d.status,
+    `${d.nice}<span class="unit">nice</span>`,
+    d.nice < 0 ? 'Higher than normal priority' : d.nice > 0 ? 'Lower than normal priority' : 'Default priority (0)',
+    bar,
+    d.description, d.advice);
+}
+
+function renderIO(d) {
+  const sub = `
+    <table class="stat-table">
+      <tr><td>Logical read</td><td>${fmtBytes(d.logical_read_bytes)} (${fmtNum(d.read_count)} ops)</td></tr>
+      <tr><td>Logical write</td><td>${fmtBytes(d.logical_write_bytes)} (${fmtNum(d.write_count)} ops)</td></tr>
+      <tr><td>Physical read</td><td>${fmtBytes(d.physical_read_bytes)}</td></tr>
+      <tr><td>Physical write</td><td>${fmtBytes(d.physical_write_bytes)}</td></tr>
+    </table>`;
+  const total = d.logical_read_bytes + d.logical_write_bytes;
+  return card('info', d.label, 'Cumulative',
+    `${fmtBytes(total)}<span class="unit">logical</span>`,
+    sub,
+    null,
+    d.description, null);
+}
+
+function renderOpenFiles(d) {
+  const fileListHtml = d.files && d.files.length
+    ? `<div class="file-list">${d.files.map(f=>`<div>${esc(f)}</div>`).join('')}${d.value > d.files.length ? `<div style="color:var(--text-dimmer)">…and ${d.value - d.files.length} more</div>` : ''}</div>`
+    : '';
+  return card(d.severity, d.label, d.status,
+    `${d.value}<span class="unit">files</span>`,
+    fileListHtml,
+    Math.min(d.value / 5, 100),
+    d.description, d.advice);
+}
+
+function renderCPUTimes(d) {
+  const hist = metricHistory['cpu_sys_pct'] || [];
+  const sc = d.severity === 'warning' ? 'var(--warning)' : 'var(--good)';
+  const spark = hist.length > 2 ? sparkline(hist, 80, 20, sc) : '';
+  const bar = d.user + d.system > 0 ? (d.system / (d.user + d.system)) * 100 : 0;
+  const sub = spark
+    ? `<div class="sparkline-wrap">${spark}<span>Kernel: ${d.system.toFixed(1)}s (${d.sys_pct || 0}% of total)</span></div>`
+    : `User: ${d.user.toFixed(1)}s · System: ${d.system.toFixed(1)}s`;
+  return card(d.severity, d.label, d.status,
+    `${d.user.toFixed(1)}<span class="unit">s user</span>`,
+    sub, bar, d.description, d.advice);
+}
+
+function renderPageFaults(d) {
+  const hist = metricHistory['page_faults_major'] || [];
+  const sc = d.major > 100 ? 'var(--danger)' : d.major > 0 ? 'var(--warning)' : 'var(--good)';
+  const spark = hist.length > 2 ? sparkline(hist, 80, 20, sc) : '';
+  const sub = spark
+    ? `<div class="sparkline-wrap">${spark}<span>Major faults: ${fmtNum(d.major)}</span></div>`
+    : `Minor: ${fmtNum(d.minor)} · Major: ${fmtNum(d.major)}`;
+  return card(d.severity, d.label, d.status,
+    `${fmtNum(d.minor)}<span class="unit">minor</span>`,
+    sub, Math.min(d.major / 100, 100), d.description, d.advice);
+}
+
+function renderUptime(d) {
+  const since = new Date(d.create_time * 1000).toLocaleString();
+  return card('good', d.label, 'Running',
+    fmtDuration(d.seconds),
+    `Started: ${since}`,
+    null, d.description, []);
+}
+
+function renderRlimits(d) {
+  const rows = (d.limits || []).map(lim => {
+    const fmt = v => v === -1 || v >= 2**62
+      ? `<span class="rlimit-unlimited">∞</span>`
+      : (v >= 1073741824 ? fmtBytes(v) : fmtNum(v));
+    return `<tr title="${esc(lim.desc)}"><td>${esc(lim.name)}</td><td>${fmt(lim.soft)}</td><td>${fmt(lim.hard)}</td></tr>`;
+  }).join('');
+  const table = `<table class="rlimit-table">
+    <tr><th>Limit</th><th>Soft</th><th>Hard</th></tr>${rows}</table>`;
+  return card(d.severity, d.label, d.status,
+    `${(d.limits || []).length}<span class="unit">limits</span>`,
+    table, null, d.description, d.advice);
+}
+
+function renderDiskRates(d) {
+  if (!d || !d.disks || !Object.keys(d.disks).length) return '';
+  const rows = Object.entries(d.disks).map(([dev, r]) =>
+    `<tr><td>${esc(dev)}</td><td>${fmtBytes(r.read_bps)}/s</td><td>${fmtBytes(r.write_bps)}/s</td><td>${fmtNum(Math.round(r.read_iops + r.write_iops))}</td></tr>`
+  ).join('');
+  const hdr = `<tr style="font-size:11px;color:var(--text-dimmer)"><td>Device</td><td>Read</td><td>Write</td><td>IOPS</td></tr>`;
+  const totalR = Object.values(d.disks).reduce((a, r) => a + r.read_bps, 0);
+  const totalW = Object.values(d.disks).reduce((a, r) => a + r.write_bps, 0);
+  return card(d.severity, d.label, d.status,
+    `${fmtBytes(totalR + totalW)}<span class="unit">/s</span>`,
+    `<table class="stat-table">${hdr}${rows}</table>`,
+    null, d.description, d.advice);
+}
+
+function renderNetRates(d) {
+  if (!d || !d.nics || !Object.keys(d.nics).length) return '';
+  const rows = Object.entries(d.nics).map(([nic, r]) => {
+    const errs = r.errin + r.errout + r.dropin + r.dropout;
+    const errCell = errs > 0 ? `<span style="color:var(--warning)">${fmtNum(errs)} err</span>` : '✓';
+    return `<tr><td>${esc(nic)}</td><td>↓ ${fmtBytes(r.recv_bps)}/s</td><td>↑ ${fmtBytes(r.sent_bps)}/s</td><td>${errCell}</td></tr>`;
+  }).join('');
+  const hdr = `<tr style="font-size:11px;color:var(--text-dimmer)"><td>NIC</td><td>Recv</td><td>Sent</td><td>Errors</td></tr>`;
+  const totalR = Object.values(d.nics).reduce((a, n) => a + n.recv_bps, 0);
+  const totalS = Object.values(d.nics).reduce((a, n) => a + n.sent_bps, 0);
+  return card(d.severity, d.label, d.status,
+    `${fmtBytes(totalR + totalS)}<span class="unit">/s</span>`,
+    `<table class="stat-table">${hdr}${rows}</table>`,
+    null, d.description, d.advice);
+}
+
+function renderPerfCard(d) {
+  if (!d) return '';
+  if (!d.available) {
+    // Build tooltip text based on the specific failure reason
+    let tipLines, msg;
+    if (d.reason === 'blocked') {
+      const paranoid = d.paranoid !== undefined ? d.paranoid : '?';
+      msg = `Hardware performance counters are blocked (perf_event_paranoid = ${paranoid}).`;
+      tipLines = [
+        `Blocked by kernel security policy.`,
+        ``,
+        `kernel.perf_event_paranoid = ${paranoid}`,
+        ``,
+        `Values 2–4 block unprivileged access to hardware`,
+        `CPU counters (IPC, cache misses, branch stats).`,
+        ``,
+        `To enable (resets on reboot):`,
+        d.fix || `sudo sysctl kernel.perf_event_paranoid=1`,
+        ``,
+        `To make it permanent:`,
+        `echo kernel.perf_event_paranoid=1 | sudo tee -a /etc/sysctl.conf`,
+      ];
+    } else if (d.reason === 'perf_not_found') {
+      msg = 'The perf tool is not installed.';
+      tipLines = [
+        `perf is not installed on this system.`,
+        ``,
+        `Install it:`,
+        `sudo apt-get install linux-tools-generic`,
+        `sudo apt-get install linux-tools-$(uname -r)`,
+        ``,
+        `Then restart PerfWatch.`,
+      ];
+    } else if (d.reason === 'timeout') {
+      msg = 'perf stat timed out while sampling.';
+      tipLines = [
+        `perf stat timed out.`,
+        ``,
+        `The monitored process may have exited during`,
+        `the 1-second measurement window.`,
+        ``,
+        `PerfWatch will retry automatically every 30s.`,
+      ];
+    } else {
+      msg = 'Performance counters are not available on this system.';
+      tipLines = [`Reason: ${d.reason || 'unknown'}`];
+    }
+
+    const tipText = tipLines.join('\n');
+    const fixHtml = d.fix
+      ? `<div class="perf-fix-cmd">${esc(d.fix)}</div>` : '';
+    return `
+      <div class="metric-card severity-info">
+        <div class="card-header">
+          <div class="card-label">Perf Counters</div>
+          <button class="perf-warn-icon" data-tip="${esc(tipText)}">⚠</button>
+          <div class="card-status status-info">Unavailable</div>
+        </div>
+        <div class="card-body">
+          <div class="perf-unavail">${esc(msg)}${fixHtml}</div>
+          <div class="card-description">Hardware counters measure CPU micro-architecture events: instructions per cycle (IPC), cache miss rate, branch mispredictions. High IPC (&gt;2) = efficient code. Low IPC with high CPU = cache thrashing. Requires kernel.perf_event_paranoid ≤ 1.</div>
+        </div>
+      </div>`;
+  }
+  const rows = [];
+  if (d.ipc !== undefined)
+    rows.push(['IPC', d.ipc.toFixed(3), d.ipc < 0.5 ? 'var(--warning)' : d.ipc > 2 ? 'var(--good)' : 'var(--text)']);
+  if (d.cache_miss_pct !== undefined)
+    rows.push(['Cache Miss %', d.cache_miss_pct.toFixed(2) + '%', d.cache_miss_pct > 10 ? 'var(--danger)' : d.cache_miss_pct > 3 ? 'var(--warning)' : 'var(--good)']);
+  if (d.branch_miss_pct !== undefined)
+    rows.push(['Branch Miss %', d.branch_miss_pct.toFixed(2) + '%', d.branch_miss_pct > 5 ? 'var(--warning)' : 'var(--good)']);
+  if (d.cycles) rows.push(['Cycles', fmtNum(d.cycles), 'var(--text)']);
+  if (d.instructions) rows.push(['Instructions', fmtNum(d.instructions), 'var(--text)']);
+  const table = `<table class="stat-table">${rows.map(([k, v, c]) =>
+    `<tr><td>${esc(k)}</td><td style="color:${c}">${v}</td></tr>`).join('')}</table>`;
+  return card('good', 'Perf Counters', 'Hardware',
+    `${d.ipc !== undefined ? d.ipc.toFixed(2) : '—'}<span class="unit">IPC</span>`,
+    table,
+    d.ipc !== undefined ? Math.min(d.ipc / 4 * 100, 100) : null,
+    'Hardware performance counters measure CPU micro-architecture efficiency. IPC = instructions executed per clock cycle (higher is better; target >1.5). Cache miss rate above 5% means the CPU is frequently waiting on RAM. Branch mispredictions cause pipeline stalls and wasted cycles.',
+    []);
+}
+
+// ── Utilities ──────────────────────────────────────────────────────
+
+function sparkline(values, w, h, color) {
+  w = w || 80; h = h || 22; color = color || 'var(--accent)';
+  if (!values || values.length < 2) return '';
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const range = max - min || 1;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * (w - 2) + 1;
+    const y = h - ((v - min) / range) * (h - 3) - 1;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return `<svg width="${w}" height="${h}" style="display:block;overflow:visible;flex-shrink:0"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function fmtDuration(secs) {
+  secs = Math.round(secs);
+  const d = Math.floor(secs / 86400);
+  const h = Math.floor((secs % 86400) / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function fmtBytes(n) {
+  if (n === undefined || n === null) return '?';
+  const units = ['B','KB','MB','GB','TB'];
+  let i = 0;
+  while (Math.abs(n) >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function fmtNum(n) {
+  if (n === undefined || n === null) return '?';
+  return n.toLocaleString();
+}
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function linkifyCode(s) {
+  // Wrap backtick-style code that survived escaping with <code>
+  return s.replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+
+// ── Stressor detail descriptions ──────────────────────────────────
+
+const STRESSOR_DETAILS = {
+  cpu: {
+    icon: '🔥',
+    subtitle: 'Single-core CPU saturation',
+    what: 'Keeps one CPU core continuously busy by running a tight arithmetic loop — adding up squares of numbers over and over without ever stopping.',
+    how: 'Every 100 milliseconds, the script spends most of that time in a busy loop, then sleeps for a short fraction to land near the 80% target. It runs at nice=10 (lower priority than normal programs), so your desktop and other apps always get CPU first.',
+    expect: [
+      'CPU Usage card climbs to the orange or red zone (70–90%).',
+      'Context Switches — involuntary count rises as the OS occasionally pulls it off the CPU to serve other work.',
+      'Memory, I/O, and network cards stay completely flat — this is pure compute load with no side effects.',
+    ],
+    safety: '🛡 Capped to ~80% of one core at low scheduling priority. Normal applications will not be noticeably affected.',
+  },
+  mem: {
+    icon: '🧠',
+    subtitle: '256 MB RAM allocation cycle',
+    what: 'Grabs 256 MB of RAM, holds it for 30 seconds, releases it, then repeats. Every single byte of the allocated memory is written to, forcing the OS to actually commit the pages rather than just reserving address space.',
+    how: 'Python bytearray objects are allocated in 16 MB chunks. Each chunk is "touched" every 4 KB to ensure the OS maps real physical pages — otherwise the kernel would lazily defer the actual allocation. After the hold period the memory is deleted and the cycle restarts.',
+    expect: [
+      'Memory card — RSS climbs to ~256 MB, then drops back near zero every 30 seconds.',
+      'System Memory card — overall RAM usage rises noticeably while memory is held.',
+      'If your system is already low on RAM, swap usage may tick up briefly during the hold period.',
+    ],
+    safety: '🛡 Hard cap of 512 MB. Checks available system RAM before each chunk allocation and pauses if free RAM drops below 300 MB.',
+  },
+  io: {
+    icon: '💾',
+    subtitle: '64 MB read/write cycles in /tmp',
+    what: 'Writes a 64 MB file in small chunks, then reads it back, then repeats — exercising the kernel\'s file I/O path continuously.',
+    how: 'The file lives in /tmp, which on this system is tmpfs — a RAM-backed filesystem. That means no physical disk is touched. The I/O goes through the kernel\'s Virtual File System (VFS) layer and lands in RAM. Small sleeps between chunks throttle the throughput to avoid hogging the I/O path.',
+    expect: [
+      'Disk I/O card — Logical read and write bytes climb steadily (these count all VFS-layer I/O, including RAM-backed).',
+      'Physical read/write bytes stay at 0 — this is expected and correct because /tmp is RAM-backed.',
+      'Read and write operation counts increment with every chunk.',
+      'CPU Usage will tick up slightly during active writes — file I/O is not free even in RAM.',
+    ],
+    safety: '🛡 File size capped at 128 MB. Writes to /tmp (RAM) only — your real disk is never touched. Throttled with small pauses between chunks.',
+  },
+  thread: {
+    icon: '🧵',
+    subtitle: '100 simultaneous threads competing for CPU',
+    what: 'Launches 100 threads that all run at the same time, each doing bursts of arithmetic followed by short random sleeps. With far fewer CPU cores than threads, the OS scheduler has to rapidly juggle which threads get to run.',
+    how: 'Each thread runs a loop: compute 10,000 multiplications, then sleep for 10–50 ms. The random sleep durations mean threads are constantly waking up at different times, creating a chaotic mix of runnable threads competing for a small number of cores.',
+    expect: [
+      'Threads card jumps to 100 immediately and stays there.',
+      'Context Switches — involuntary count spikes significantly. This is the OS preempting threads to share the CPU fairly.',
+      'CPU Usage rises moderately — 100 threads doing light work across a few cores.',
+      'Memory increases slightly — each thread needs its own stack (typically ~8 MB reserved, much less actually used).',
+    ],
+    safety: '🛡 Capped at 150 threads. Each thread does minimal work with built-in sleep time, so total CPU load is moderate rather than saturating.',
+  },
+  fd: {
+    icon: '📂',
+    subtitle: '350 open file descriptor handles',
+    what: 'Opens 350 file handles all pointing to /dev/null and holds them open. This simulates a process that opens files or connections but never closes them — a classic resource leak.',
+    how: '/dev/null is a special device that discards everything written to it and returns nothing when read. Opening handles to it uses a real kernel file descriptor slot (the resource we\'re measuring) without consuming any disk space or memory. The process simply holds all 350 handles open indefinitely.',
+    expect: [
+      'Open File Descriptors card jumps from a few FDs to ~353 (350 test + a few the process needs for itself).',
+      'The progress bar fills to show what percentage of the process FD limit is used.',
+      'If FDs approached the limit, new file opens and network connections would fail with "Too many open files".',
+    ],
+    safety: '🛡 Capped at 400 FDs, well below the typical system limit of 1024+. Uses /dev/null only — zero disk space, zero memory beyond the kernel descriptor table entries.',
+  },
+  conn: {
+    icon: '🔌',
+    subtitle: '150 loopback TCP connections with TIME_WAIT cycling',
+    what: 'Opens 150 TCP connections that loop back to a mini server running inside the same process — no traffic goes anywhere near the internet. Every 10 seconds it closes 20 connections and reopens them, deliberately generating TIME_WAIT sockets.',
+    how: 'A small server thread listens on a local port. 150 client sockets connect to it, creating ESTABLISHED connections. Periodically, some connections are closed by the client side. Closed TCP connections linger in TIME_WAIT state for a short period (the OS holds them to catch any late-arriving packets). This is normal TCP behavior, but large numbers of TIME_WAIT sockets can exhaust the local port range.',
+    expect: [
+      'Network Connections card shows ~150 ESTABLISHED sockets immediately.',
+      'After each cycling round (~10 seconds), TIME_WAIT sockets appear briefly then fade.',
+      'Total socket count fluctuates slightly as connections are closed and reopened.',
+      'CLOSE_WAIT will not appear — that only happens when a process ignores a remote close, which this test does not do.',
+    ],
+    safety: '🛡 Loopback only (127.0.0.1) — no external network traffic. Capped at 200 connections. All connections are cleaned up on stop.',
+  },
+  syscall: {
+    icon: '⚙️',
+    subtitle: 'Rapid kernel syscall throughput',
+    what: 'Opens and immediately closes thousands of pipe file descriptors per second. Each open+close is three real kernel system calls. Almost all CPU activity happens inside the kernel, pushing "system" time to the top of the CPU Time Breakdown card while user time stays near zero.',
+    how: 'Python\'s os.pipe() calls the kernel\'s pipe2 syscall to create a pair of file descriptors. os.close() tears each one down. Repeating this 5,000 times per burst forces the CPU to spend most of its time in kernel mode. A sleep after each burst keeps total CPU near 60% so other processes stay responsive.',
+    expect: [
+      'CPU Time Breakdown — system time climbs steeply; user time stays near zero. The sparkline trends upward into the warning (Kernel-Heavy) zone.',
+      'CPU Usage — moderate overall (~50–60%) but almost entirely kernel time, not user code.',
+      'Context Switches — voluntary switches tick up as the process sleeps between bursts.',
+      'Memory, Disk I/O, and Network cards stay completely flat — no side effects.',
+    ],
+    safety: '🛡 Capped at ~60% CPU via sleep throttle. At most 2 extra file descriptors exist at any instant — created and destroyed in the same loop iteration.',
+  },
+  leak: {
+    icon: '💧',
+    subtitle: 'Gradual RSS growth that never drops',
+    what: 'Allocates 8 MB of RAM every 3 seconds and deliberately keeps every byte forever, simulating a real application memory leak. The Memory sparkline shows a steady upward slope — the classic diagnostic signature that distinguishes a leak from normal allocation patterns.',
+    how: 'Python bytearray objects are allocated in 8 MB chunks. Every 4 KB page is written to so the OS immediately commits physical memory frames rather than lazily deferring. References are held in a list that is never cleared, preventing Python\'s garbage collector from reclaiming them. On stop, the list is cleared and all memory released.',
+    expect: [
+      'Memory card — RSS grows continuously, roughly 8 MB every 3 seconds. Unlike the Memory Hog stressor, it never drops back down.',
+      'Memory sparkline — a clear upward trend line rather than a sawtooth pattern.',
+      'System Memory card — overall RAM usage ticks upward steadily.',
+      'Status badge transitions from Normal → Warning → Danger as the percentage grows.',
+    ],
+    safety: '🛡 Hard cap at 512 MB. Checks available system RAM before each chunk and pauses if free memory falls below 300 MB. All memory released immediately on stop.',
+  },
+  pagefault: {
+    icon: '📄',
+    subtitle: '~32,000 minor page faults per cycle',
+    what: 'Allocates a 128 MB buffer, writes one byte to every 4 KB page in it, discards the whole buffer, and repeats. The first write to any page that has not yet been physically mapped triggers a minor page fault: the kernel must find a free frame and install a page table entry before the write can complete.',
+    how: 'A Python bytearray defers physical memory allocation until a page is first accessed (demand paging). Writing to one byte every 4,096 bytes forces 32,768 minor faults per cycle. The buffer is deleted after each cycle so no memory accumulates. Major faults — which require reading from disk or swap — do not occur under normal conditions.',
+    expect: [
+      'Page Faults card — minor fault counter climbs rapidly, adding ~32,000 per cycle.',
+      'Minor fault sparkline rises steeply while the stressor is running, then levels off if paused.',
+      'CPU Usage ticks up moderately — handling 32K faults per second has real overhead.',
+      'Memory card stays low — the buffer is allocated and freed each cycle with no net growth.',
+    ],
+    safety: '🛡 128 MB buffer is fully released every cycle — no cumulative memory growth. Does not cause swap or major faults under normal conditions.',
+  },
+  netflood: {
+    icon: '🌊',
+    subtitle: 'Up to 200 MB/s loopback data stream',
+    what: 'Streams 64 KB chunks of data as fast as possible between a sender socket and a receiver socket, both on the same machine over the loopback interface. This is the only stressor that drives the System Network I/O card to show real throughput — the Connection Flood stressor opens sockets but sends no data, so the net card normally reads near zero.',
+    how: 'A receiver thread binds a local port and reads whatever arrives. The main thread connects and calls sendall() in a tight loop. A rate limiter checks the running average and inserts brief sleeps to stay near 200 MB/s. The loopback interface (127.0.0.1) is purely in-kernel — no packets reach any physical NIC or leave the machine.',
+    expect: [
+      'System Network I/O card — recv and sent throughput both climb to ~100–200 MB/s.',
+      'The system strip Net indicator shows significant ↓/↑ values.',
+      'CPU Usage rises moderately — socket I/O has CPU overhead even on loopback.',
+      'Network Connections card on this process shows one ESTABLISHED connection (the sender).',
+    ],
+    safety: '🛡 Loopback only (127.0.0.1) — no external network traffic. Soft cap at 200 MB/s. All sockets closed cleanly on stop.',
+  },
+};
+
+// ── Modal logic ────────────────────────────────────────────────────
+
+function openStressorModal(name) {
+  const d = STRESSOR_DETAILS[name];
+  if (!d) return;
+  $('modal-icon').textContent     = d.icon;
+  $('modal-title').textContent    = STRESSOR_DETAILS[name] ? name.charAt(0).toUpperCase() + name.slice(1) : name;
+  // Get label from current stressor list data
+  const item = $('stressor-list').querySelector(`[data-info="${name}"]`);
+  $('modal-title').textContent    = item ? item.dataset.label : name;
+  $('modal-subtitle').textContent = d.subtitle;
+  $('modal-what').textContent     = d.what;
+  $('modal-how').textContent      = d.how;
+  $('modal-expect').innerHTML     = d.expect.map(e => `<div class="modal-expect-item">${esc(e)}</div>`).join('');
+  $('modal-safety').textContent   = d.safety;
+  $('modal-overlay').classList.add('open');
+  $('modal-close').focus();
+}
+
+function closeModal() {
+  $('modal-overlay').classList.remove('open');
+}
+
+$('modal-close').addEventListener('click', closeModal);
+$('modal-overlay').addEventListener('click', e => { if (e.target === $('modal-overlay')) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── System-wide SSE (load avg, per-core CPU, disk/net rates) ──────
+
+function startSystemSSE() {
+  if (sysSSE) return;
+  sysSSE = new EventSource('/api/system');
+  sysSSE.onmessage = e => {
+    try {
+      sysMetrics = JSON.parse(e.data);
+      renderSystemStrip(sysMetrics);
+    } catch(_) {}
+  };
+}
+
+function renderSystemStrip(sys) {
+  if (!sys || !sys.system_cpu) return;
+  const cpu = sys.system_cpu;
+  const strip = $('sys-strip');
+
+  const coreBars = (cpu.per_core || []).slice(0, 16).map(pct => {
+    const h = Math.max(2, Math.round(pct / 100 * 18));
+    const cls = pct > 80 ? 'danger' : pct > 50 ? 'warning' : '';
+    return `<div class="core-bar ${cls}" style="height:${h}px" title="${pct.toFixed(0)}%"></div>`;
+  }).join('');
+
+  const loadClass = cpu.load_severity === 'danger' ? 'danger' : cpu.load_severity === 'warning' ? 'warning' : '';
+
+  let diskStr = '—';
+  if (sys.disk_rates && sys.disk_rates.disks) {
+    const disks = Object.values(sys.disk_rates.disks);
+    if (disks.length) {
+      const r = disks.reduce((a, d) => a + d.read_bps, 0);
+      const w = disks.reduce((a, d) => a + d.write_bps, 0);
+      diskStr = `↓${fmtBytes(r)}/s ↑${fmtBytes(w)}/s`;
+    }
+  }
+
+  let netStr = '—';
+  if (sys.net_rates && sys.net_rates.nics) {
+    const nics = Object.values(sys.net_rates.nics);
+    if (nics.length) {
+      const r = nics.reduce((a, n) => a + n.recv_bps, 0);
+      const s = nics.reduce((a, n) => a + n.sent_bps, 0);
+      netStr = `↓${fmtBytes(r)}/s ↑${fmtBytes(s)}/s`;
+    }
+  }
+
+  strip.innerHTML = `
+    <div class="sys-strip-item">
+      <span class="sys-strip-label">CPU Cores</span>
+      <div class="core-bars">${coreBars}</div>
+    </div>
+    <span class="sys-strip-sep">│</span>
+    <div class="sys-strip-item">
+      <span class="sys-strip-label">User</span>
+      <span class="sys-strip-value">${cpu.user}%</span>
+    </div>
+    <div class="sys-strip-item">
+      <span class="sys-strip-label">Sys</span>
+      <span class="sys-strip-value">${cpu.system}%</span>
+    </div>
+    ${cpu.iowait > 0 ? `<div class="sys-strip-item"><span class="sys-strip-label">IOWait</span><span class="sys-strip-value ${cpu.iowait > 20 ? 'warning' : ''}">${cpu.iowait}%</span></div>` : ''}
+    <span class="sys-strip-sep">│</span>
+    <div class="sys-strip-item">
+      <span class="sys-strip-label">Load Avg</span>
+      <span class="sys-strip-value ${loadClass}">${cpu.load1} · ${cpu.load5} · ${cpu.load15}</span>
+    </div>
+    <span class="sys-strip-sep">│</span>
+    <div class="sys-strip-item">
+      <span class="sys-strip-label">Disk</span>
+      <span class="sys-strip-value">${diskStr}</span>
+    </div>
+    <div class="sys-strip-item">
+      <span class="sys-strip-label">Net</span>
+      <span class="sys-strip-value">${netStr}</span>
+    </div>
+  `;
+}
+
+// ── Perf counter fetcher ───────────────────────────────────────────
+
+async function fetchPerfCounters(pid) {
+  try {
+    const res = await fetch(`/api/perf?pid=${pid}`);
+    const data = await res.json();
+    if (selectedPid !== pid) return;
+    perfData = data;
+    // Card will appear on next SSE metrics tick (within 2s)
+  } catch(_) { /* silently ignore */ }
+}
+
+// ── Stressor panel ────────────────────────────────────────────────
+
+let stressorPanelOpen = true;
+
+$('stressor-toggle').addEventListener('click', () => {
+  stressorPanelOpen = !stressorPanelOpen;
+  $('stressor-chevron').classList.toggle('open', stressorPanelOpen);
+  if (stressorPanelOpen) {
+    loadStressors();          // renders content, then expandStressorPanel() fires
+  } else {
+    $('stressor-body').style.maxHeight = '0';
+  }
+});
+
+function expandStressorPanel() {
+  if (!stressorPanelOpen) return;
+  const body = $('stressor-body');
+  // scrollHeight always reflects full content height regardless of max-height/overflow
+  body.style.maxHeight = body.scrollHeight + 'px';
+}
+
+async function loadStressors() {
+  try {
+    const res = await fetch('/api/stressors');
+    const data = await res.json();
+    renderStressors(data);
+  } catch(e) {
+    $('stressor-list').innerHTML = `<div style="padding:10px 14px;font-size:13px;color:var(--danger)">Failed to load stressors</div>`;
+  }
+}
+
+function renderStressors(stressors) {
+  const running = stressors.filter(s => s.running).length;
+  const countEl = $('stressor-run-count');
+  if (running > 0) {
+    countEl.textContent = `${running} running`;
+    countEl.classList.add('visible');
+  } else {
+    countEl.classList.remove('visible');
+  }
+
+  $('stressor-list').innerHTML = stressors.map(s => {
+    const dotClass = s.running ? 'running' : '';
+    const btnClass = s.running ? 'stop' : 'start';
+    const btnLabel = s.running ? 'Stop' : 'Start';
+    const pidHtml  = s.running
+      ? `<div class="stressor-pid-link" data-pid="${s.pid}">PID ${s.pid} — click to monitor ↗</div>`
+      : '';
+    return `
+      <div class="stressor-item">
+        <div class="stressor-item-row">
+          <span class="stressor-dot ${dotClass}"></span>
+          <span class="stressor-name">${esc(s.label)}</span>
+          <button class="stressor-info-btn" data-info="${esc(s.name)}" data-label="${esc(s.label)}" title="What does this do?">i</button>
+          <button class="stressor-btn ${btnClass}" data-name="${esc(s.name)}" data-action="${btnClass}">${btnLabel}</button>
+        </div>
+        <div class="stressor-desc">${esc(s.desc)}</div>
+        ${pidHtml}
+      </div>`;
+  }).join('');
+
+  // Wire info buttons
+  $('stressor-list').querySelectorAll('.stressor-info-btn').forEach(btn => {
+    btn.addEventListener('click', () => openStressorModal(btn.dataset.info));
+  });
+
+  // Wire start/stop buttons
+  $('stressor-list').querySelectorAll('.stressor-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const name   = btn.dataset.name;
+      const action = btn.dataset.action;
+
+      // Capture the stressor's PID *before* we terminate it so we can
+      // close the SSE stream if we're currently monitoring it.
+      const pidLink    = btn.closest('.stressor-item').querySelector('.stressor-pid-link');
+      const stoppingPid = pidLink ? +pidLink.dataset.pid : null;
+
+      try {
+        const res = await fetch(`/api/stressors/${action}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({name}),
+        });
+        const data = await res.json();
+        if (data.error) {
+          console.warn('Stressor error:', data.error);
+        } else if (action === 'start' && data.pid) {
+          setTimeout(() => {
+            loadProcesses();
+            selectProcess(data.pid, {name: name + '_stress', cmd: '', username: ''});
+          }, 800);
+        } else if (action === 'stop') {
+          // Refresh process list to drop the now-dead process
+          loadProcesses();
+          // If we're currently monitoring this stressor, close the stream and reset
+          if (stoppingPid && stoppingPid === selectedPid) {
+            if (sse) { sse.close(); sse = null; }
+            showPlaceholder();
+          }
+        }
+      } catch(e) {
+        console.error('Stressor request failed', e);
+      }
+      await loadStressors();
+      btn.disabled = false;
+    });
+  });
+
+  // Wire PID links
+  $('stressor-list').querySelectorAll('.stressor-pid-link').forEach(el => {
+    el.addEventListener('click', () => {
+      const pid = +el.dataset.pid;
+      loadProcesses().then(() => {
+        // Find the proc in the list and select it
+        const item = $('proc-list').querySelector(`[data-pid="${pid}"]`);
+        if (item) {
+          item.click();
+          item.scrollIntoView({block: 'nearest'});
+        } else {
+          // Proc list may be filtered — select directly by PID
+          selectProcess(pid, {name: '…', cmd: '', username: ''});
+        }
+      });
+    });
+  });
+
+  // Resize panel to fit new content (PID lines may have appeared/disappeared)
+  expandStressorPanel();
+}
+
+// ── Bootstrap ──────────────────────────────────────────────────────
+
+$('search-input').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadProcesses, 200);
+});
+
+$('hide-system').addEventListener('change', loadProcesses);
+
+// Refresh process list every 10s
+loadProcesses();
+setInterval(loadProcesses, 10000);
+
+// Refresh stressor status every 3s (only updates count badge when panel is closed)
+loadStressors();
+setInterval(() => loadStressors(), 3000);
+
+// Start system-wide metrics SSE (load avg, per-core CPU, disk/net)
+startSystemSSE();
+</script>
+</body>
+</html>
