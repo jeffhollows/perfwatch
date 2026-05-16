@@ -5,6 +5,7 @@ import json
 import os
 import re
 import resource
+import shutil
 import subprocess
 import sys
 import threading
@@ -18,6 +19,13 @@ import psutil
 PORT = 8765
 STATIC_DIR    = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
 STRESSORS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stressors')
+
+# py-spy: installed via pip install --user py-spy; fall back to PATH
+_py_spy_candidates = [
+    shutil.which('py-spy'),
+    os.path.expanduser('~/.local/bin/py-spy'),
+]
+PY_SPY_PATH = next((p for p in _py_spy_candidates if p and os.path.isfile(p)), None)
 
 STRESSOR_DEFS = {
     'cpu':       {'script': 'cpu_stress.py',       'label': 'CPU Burner',       'desc': 'Burns ~80% of one core (nice=10, low priority)'},
@@ -314,6 +322,87 @@ def run_perf_stat(pid: int) -> dict:
         return {'available': False, 'reason': 'perf_not_found'}
     except Exception as e:
         return {'available': False, 'reason': str(e)}
+
+
+def _read_ptrace_scope() -> int:
+    try:
+        with open('/proc/sys/kernel/yama/ptrace_scope') as f:
+            return int(f.read().strip())
+    except Exception:
+        return -1
+
+
+def run_profile(pid: int, duration: int = 10) -> dict:
+    """Sample call stacks via py-spy; return folded stacks for flamegraph rendering."""
+    if not PY_SPY_PATH:
+        return {
+            'available': False,
+            'reason': 'py_spy_not_found',
+            'install': 'pip install py-spy',
+        }
+    tmp = f'/tmp/perfwatch_profile_{pid}_{int(time.time())}.txt'
+    try:
+        result = subprocess.run(
+            [PY_SPY_PATH, 'record',
+             '--pid', str(pid),
+             '--duration', str(duration),
+             '--format', 'raw',
+             '--output', tmp,
+             '--nonblocking'],
+            capture_output=True, text=True,
+            timeout=duration + 15,
+        )
+        combined = (result.stderr + result.stdout).lower()
+        if result.returncode != 0:
+            if 'not a python' in combined or 'could not get' in combined or 'unable to connect' in combined:
+                return {'available': False, 'reason': 'not_python',   'detail': result.stderr.strip()[:300]}
+            if 'permission' in combined or 'operation not permitted' in combined:
+                scope = _read_ptrace_scope()
+                return {
+                    'available': False, 'reason': 'permission',
+                    'ptrace_scope': scope,
+                    'fix': 'sudo sysctl kernel.yama.ptrace_scope=0',
+                    'detail': result.stderr.strip()[:300],
+                }
+            if 'no such process' in combined or 'process has already' in combined:
+                return {'available': False, 'reason': 'no_process',   'detail': result.stderr.strip()[:300]}
+            return {'available': False, 'reason': 'error',            'detail': (result.stderr + result.stdout).strip()[:400]}
+
+        with open(tmp) as f:
+            data = f.read()
+
+        if not data.strip():
+            return {'available': False, 'reason': 'no_data',
+                    'detail': 'py-spy ran but collected no samples — process may have been idle.'}
+
+        sample_count = 0
+        for line in data.strip().split('\n'):
+            line = line.strip()
+            if line:
+                try:
+                    sample_count += int(line.rsplit(' ', 1)[-1])
+                except ValueError:
+                    pass
+
+        return {
+            'available': True,
+            'format':    'folded',
+            'data':      data,
+            'duration':  duration,
+            'pid':       pid,
+            'samples':   sample_count,
+        }
+    except subprocess.TimeoutExpired:
+        return {'available': False, 'reason': 'timeout'}
+    except FileNotFoundError:
+        return {'available': False, 'reason': 'py_spy_not_found', 'install': 'pip install py-spy'}
+    except Exception as e:
+        return {'available': False, 'reason': 'error', 'detail': str(e)[:200]}
+    finally:
+        try:
+            os.unlink(tmp)
+        except Exception:
+            pass
 
 
 def _read_perf_paranoid() -> int:
@@ -920,6 +1009,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(400, 'Invalid PID')
                 return
             self._json(run_perf_stat(pid))
+        elif path == '/api/profile':
+            try:
+                pid      = int(qs.get('pid',      ['0'])[0])
+                duration = min(int(qs.get('duration', ['10'])[0]), 60)
+            except ValueError:
+                self.send_error(400, 'Invalid parameters')
+                return
+            self._json(run_profile(pid, duration))
         else:
             self.send_error(404)
 

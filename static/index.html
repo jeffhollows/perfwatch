@@ -847,6 +847,133 @@ input:focus { border-color: var(--accent); }
   .sidebar { width: 220px; }
   .metrics-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Profile button ── */
+.profile-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 5px;
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+.profile-btn:hover { background: rgba(210,153,34,0.12); }
+.profile-btn:active { transform: scale(0.95); }
+
+/* ── Flamegraph overlay ── */
+.fg-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.fg-overlay.open { opacity: 1; pointer-events: all; }
+
+.fg-header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.fg-title { font-size: 15px; font-weight: 700; flex: 1; }
+.fg-subtitle { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.fg-close {
+  background: transparent; border: none; color: var(--text-dimmer);
+  font-size: 20px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
+  transition: color 0.15s, background 0.15s; line-height: 1;
+}
+.fg-close:hover { color: var(--text); background: var(--bg3); }
+
+.fg-toolbar {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 7px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.fg-search {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text); padding: 4px 10px; font-size: 13px; outline: none; width: 200px;
+  transition: border-color 0.15s;
+}
+.fg-search:focus { border-color: var(--accent); }
+.fg-tbtn {
+  font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 4px;
+  border: 1px solid var(--border); color: var(--text-dim); background: transparent;
+  cursor: pointer; transition: background 0.15s, color 0.15s; white-space: nowrap;
+}
+.fg-tbtn:hover { background: var(--bg3); color: var(--text); }
+.fg-tbtn:disabled { opacity: 0.3; cursor: default; }
+.fg-stats { margin-left: auto; font-size: 12px; color: var(--text-dimmer); font-family: var(--font); }
+
+.fg-body { flex: 1; overflow: auto; background: var(--bg); position: relative; }
+
+.fg-canvas { display: block; }
+
+/* Start panel */
+.fg-panel {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 14px; height: 100%;
+  color: var(--text-dim); text-align: center; padding: 40px;
+}
+.fg-panel h3 { font-size: 18px; font-weight: 600; color: var(--text); }
+.fg-panel p  { font-size: 14px; max-width: 420px; line-height: 1.6; }
+.fg-dur-row  { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.fg-dur-btn {
+  padding: 6px 16px; border-radius: 5px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 13px; cursor: pointer;
+  transition: all 0.15s;
+}
+.fg-dur-btn:hover, .fg-dur-btn.sel {
+  border-color: var(--warning); color: var(--warning); background: rgba(210,153,34,0.1);
+}
+.fg-go {
+  padding: 10px 36px; border-radius: 6px; border: none;
+  background: var(--warning); color: #000; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: opacity 0.15s; margin-top: 6px;
+}
+.fg-go:hover { opacity: 0.85; }
+.fg-go:disabled { opacity: 0.4; cursor: default; }
+.fg-mono { font-family: var(--font); font-size: 11px; background: var(--bg3); padding: 1px 6px; border-radius: 3px; }
+
+/* Countdown */
+.fg-countdown-big { font-size: 52px; font-family: var(--font); color: var(--warning); font-weight: 700; line-height: 1; }
+.fg-pbar-wrap { width: 280px; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+.fg-pbar { height: 100%; background: var(--warning); border-radius: 3px; transition: width 0.9s linear; width: 0%; }
+
+/* Error/info */
+.fg-info-icon  { font-size: 44px; }
+.fg-info-title { font-size: 16px; font-weight: 600; color: var(--text); }
+.fg-info-msg   { font-size: 13px; color: var(--text-dim); max-width: 460px; line-height: 1.65; white-space: pre-line; }
+.fg-info-cmd   { font-family: var(--font); font-size: 12px; background: var(--bg3); padding: 8px 14px; border-radius: 5px; color: var(--text); }
+
+/* Flamegraph tooltip */
+.fg-tip {
+  position: fixed; z-index: 400; background: #090d12; border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 12px; font-family: var(--font); font-size: 12px;
+  color: var(--text); max-width: 500px; line-height: 1.6; pointer-events: none;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.6); display: none; word-break: break-all;
+}
+.fg-tip-name { font-weight: 700; display: block; margin-bottom: 3px; color: var(--text); }
+.fg-tip-pct  { color: var(--warning); font-weight: 700; }
+.fg-tip-self { color: var(--text-dimmer); font-size: 11px; }
+.fg-tip-hint { color: var(--text-dimmer); font-size: 11px; }
 </style>
 </head>
 <body>
@@ -914,6 +1041,26 @@ input:focus { border-color: var(--accent); }
 
 <!-- Metric card tooltip (perf warn icon, etc.) -->
 <div class="proc-tooltip" id="metric-tooltip"></div>
+
+<!-- Flamegraph modal -->
+<div class="fg-overlay" id="fg-overlay">
+  <div class="fg-header">
+    <div style="flex:1">
+      <div class="fg-title" id="fg-title">🔥 Flamegraph</div>
+      <div class="fg-subtitle" id="fg-subtitle"></div>
+    </div>
+    <button class="fg-close" id="fg-close" aria-label="Close">✕</button>
+  </div>
+  <div class="fg-toolbar" id="fg-toolbar" style="display:none">
+    <input class="fg-search" id="fg-search" type="text" placeholder="Search frames…" autocomplete="off">
+    <button class="fg-tbtn" id="fg-zoom-out" disabled>← Zoom out</button>
+    <button class="fg-tbtn" id="fg-reset">Reset zoom</button>
+    <button class="fg-tbtn" id="fg-again">Profile again</button>
+    <span class="fg-stats" id="fg-stats"></span>
+  </div>
+  <div class="fg-body" id="fg-body"></div>
+</div>
+<div class="fg-tip" id="fg-tip"></div>
 
 <!-- Stressor info modal — must be in DOM before the script block runs -->
 <div class="modal-overlay" id="modal-overlay">
@@ -1161,6 +1308,7 @@ function renderProcessHeader() {
       <span class="proc-name-big">${esc(p.name)}</span>
       <span class="proc-pid">PID ${p.pid}</span>
       <span class="proc-cmd-big">${esc(p.cmd || '')}</span>
+      <button class="profile-btn" onclick="openFgModal()">🔥 Profile</button>
       <span class="refresh-time" id="refresh-time">Loading…</span>
     </div>
     <div class="metrics-grid" id="metrics-grid"></div>
@@ -2008,6 +2156,354 @@ function renderStressors(stressors) {
 
   // Resize panel to fit new content (PID lines may have appeared/disappeared)
   expandStressorPanel();
+}
+
+// ── Flamegraph modal ──────────────────────────────────────────────
+
+let fgRenderer  = null;
+let fgDuration  = 10;
+let fgCdTimer   = null;
+
+function openFgModal() {
+  $('fg-title').textContent    = `🔥 Flamegraph — ${selectedProc ? selectedProc.name : ''} (PID ${selectedPid})`;
+  $('fg-subtitle').textContent = '';
+  $('fg-toolbar').style.display = 'none';
+  $('fg-overlay').classList.add('open');
+  showFgStart();
+}
+
+function closeFgModal() {
+  $('fg-overlay').classList.remove('open');
+  if (fgCdTimer) { clearInterval(fgCdTimer); fgCdTimer = null; }
+}
+
+$('fg-close').addEventListener('click', closeFgModal);
+$('fg-overlay').addEventListener('click', e => { if (e.target === $('fg-overlay')) closeFgModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('fg-overlay').classList.contains('open')) closeFgModal(); });
+
+function showFgStart() {
+  $('fg-body').innerHTML = `
+    <div class="fg-panel">
+      <div style="font-size:52px;line-height:1">🔥</div>
+      <h3>Profile this process</h3>
+      <p>Samples call stacks with <span class="fg-mono">py-spy</span> and renders an interactive flamegraph.
+         The process keeps running normally — no pauses.</p>
+      <div class="fg-dur-row">
+        <span style="font-size:13px;color:var(--text-dim)">Duration:</span>
+        ${[5,10,30].map(d => `<button class="fg-dur-btn${d===fgDuration?' sel':''}" onclick="setFgDur(${d},this)">${d}s</button>`).join('')}
+      </div>
+      <button class="fg-go" onclick="startFgProfile()">Start profiling</button>
+      <p style="font-size:12px;opacity:0.55;margin-top:4px">
+        Works on Python processes · no root required ·
+        <span class="fg-mono">py-spy</span> uses ptrace
+      </p>
+    </div>`;
+}
+
+function setFgDur(d, btn) {
+  fgDuration = d;
+  btn.closest('.fg-dur-row').querySelectorAll('.fg-dur-btn').forEach(b => b.classList.toggle('sel', b === btn));
+}
+
+async function startFgProfile() {
+  if (!selectedPid) return;
+  const dur = fgDuration;
+
+  // Countdown UI
+  $('fg-body').innerHTML = `
+    <div class="fg-panel">
+      <div style="font-size:13px;color:var(--text-dim)">Sampling call stacks…</div>
+      <div class="fg-countdown-big" id="fg-cd">${dur}s</div>
+      <div class="fg-pbar-wrap"><div class="fg-pbar" id="fg-pbar"></div></div>
+      <div style="font-size:13px;color:var(--text-dimmer)" id="fg-plabel">Collecting ${dur} seconds of samples</div>
+    </div>`;
+
+  const t0 = Date.now();
+  fgCdTimer = setInterval(() => {
+    const el = (Date.now() - t0) / 1000;
+    const rem = Math.max(0, dur - Math.floor(el));
+    const pct = Math.min(el / dur * 100, 100);
+    const cd = $('fg-cd'), pb = $('fg-pbar');
+    if (cd) cd.textContent = rem + 's';
+    if (pb) pb.style.width = pct + '%';
+  }, 200);
+
+  try {
+    const res  = await fetch(`/api/profile?pid=${selectedPid}&duration=${dur}`);
+    const data = await res.json();
+    if (fgCdTimer) { clearInterval(fgCdTimer); fgCdTimer = null; }
+    data.available ? showFgGraph(data) : showFgError(data);
+  } catch(e) {
+    if (fgCdTimer) { clearInterval(fgCdTimer); fgCdTimer = null; }
+    showFgError({reason:'error', detail: e.message});
+  }
+}
+
+function showFgError(d) {
+  const msgs = {
+    py_spy_not_found: ['📦', 'py-spy not installed',
+      'Install it with:', d.install || 'pip install py-spy'],
+    not_python: ['🐍', 'Not a Python process',
+      'py-spy can only profile Python processes without root privileges.\nTo profile any process, run PerfWatch as root (see README security notes).', ''],
+    permission: ['🔒', 'Permission denied',
+      'py-spy uses ptrace to read call stacks. The kernel ptrace_scope setting is currently blocking this.' +
+      (d.ptrace_scope !== undefined ? `\n\nkernel.yama.ptrace_scope = ${d.ptrace_scope}` : '') +
+      '\n\nTo allow profiling of processes you own (resets on reboot):',
+      d.fix || 'sudo sysctl kernel.yama.ptrace_scope=0'],
+    no_process: ['👻', 'Process exited',
+      'The process exited during profiling.', ''],
+    no_data: ['📭', 'No samples collected',
+      d.detail || 'py-spy ran but produced no stack samples — the process may have been idle.', ''],
+    timeout: ['⏱', 'Timed out',
+      'Profiling took too long to complete.', ''],
+  };
+  const [icon, title, msg, cmd] = msgs[d.reason] || ['⚠️', 'Profiling failed', d.detail || 'Unknown error', ''];
+  $('fg-body').innerHTML = `
+    <div class="fg-panel">
+      <div class="fg-info-icon">${icon}</div>
+      <div class="fg-info-title">${esc(title)}</div>
+      <div class="fg-info-msg">${esc(msg)}</div>
+      ${cmd ? `<div class="fg-info-cmd">${esc(cmd)}</div>` : ''}
+      <button class="fg-go" style="margin-top:12px;padding:8px 28px;font-size:13px" onclick="showFgStart()">← Back</button>
+    </div>`;
+}
+
+function showFgGraph(data) {
+  $('fg-toolbar').style.display = 'flex';
+  $('fg-subtitle').textContent  = `${data.duration}s · ${(data.samples||0).toLocaleString()} samples`;
+  $('fg-body').innerHTML = '<canvas id="fg-canvas" class="fg-canvas"></canvas>';
+
+  const canvas = $('fg-canvas');
+  const body   = $('fg-body');
+  canvas.width = body.clientWidth;
+
+  fgRenderer = new FlamegraphRenderer(canvas, $('fg-tip'));
+  fgRenderer.load(data.data);
+
+  const st = $('fg-stats');
+  if (st) st.textContent = `${fgRenderer.totalSamples.toLocaleString()} samples · ${fgRenderer.maxDepth} frames deep`;
+
+  // Wire toolbar controls
+  const srch = $('fg-search');
+  srch.value = '';
+  srch.oninput = e => { fgRenderer.setSearch(e.target.value); fgSyncZoomBtn(); };
+
+  $('fg-zoom-out').onclick  = () => { fgRenderer.zoomOut();    fgSyncZoomBtn(); };
+  $('fg-reset').onclick     = () => { fgRenderer.resetZoom();  fgSyncZoomBtn(); };
+  $('fg-again').onclick     = () => {
+    $('fg-toolbar').style.display = 'none';
+    $('fg-subtitle').textContent  = '';
+    fgRenderer = null;
+    showFgStart();
+  };
+  fgSyncZoomBtn();
+
+  // Reflow canvas on container resize
+  new ResizeObserver(() => {
+    if (!fgRenderer) return;
+    const w = body.clientWidth;
+    if (Math.abs(w - canvas.width) > 2) {
+      canvas.width = w;
+      fgRenderer._layout();
+      fgRenderer.render();
+    }
+  }).observe(body);
+}
+
+function fgSyncZoomBtn() {
+  const btn = $('fg-zoom-out');
+  if (btn && fgRenderer) btn.disabled = fgRenderer.zoomStack.length === 0;
+}
+
+// ── FlamegraphRenderer ────────────────────────────────────────────
+
+class FlamegraphRenderer {
+  constructor(canvas, tip) {
+    this.canvas = canvas;
+    this.ctx    = canvas.getContext('2d');
+    this.tip    = tip;
+    this._root  = null;
+    this.zoomRoot    = null;
+    this.zoomStack   = [];
+    this.totalSamples = 0;
+    this.maxDepth    = 0;
+    this._frames     = [];
+    this.searchTerm  = '';
+    this.FRAME_H     = 22;
+    this.MIN_W       = 0.5;
+
+    canvas.addEventListener('click',      this._onClick.bind(this));
+    canvas.addEventListener('mousemove',  this._onMouseMove.bind(this));
+    canvas.addEventListener('mouseleave', this._onMouseLeave.bind(this));
+  }
+
+  load(folded) {
+    const root = {name:'all', value:0, children:new Map(), parent:null};
+    for (const raw of folded.trim().split('\n')) {
+      const line = raw.trim();
+      if (!line) continue;
+      const sp = line.lastIndexOf(' ');
+      if (sp < 0) continue;
+      const count  = parseInt(line.slice(sp + 1));
+      const frames = line.slice(0, sp).split(';').map(f => f.trim()).filter(Boolean);
+      if (!frames.length || isNaN(count)) continue;
+      let node = root;
+      node.value += count;
+      for (const f of frames) {
+        if (!node.children.has(f))
+          node.children.set(f, {name:f, value:0, children:new Map(), parent:node});
+        node = node.children.get(f);
+        node.value += count;
+      }
+    }
+    this._root = root;
+    this.totalSamples = root.value;
+    this.zoomRoot  = root;
+    this.zoomStack = [];
+    this._layout();
+    this.render();
+  }
+
+  _layout() {
+    this._frames  = [];
+    this.maxDepth = 0;
+    const W = this.canvas.width;
+    const walk = (node, x, w, depth) => {
+      if (w < this.MIN_W) return;
+      this._frames.push({node, name:node.name, x, width:w, depth, value:node.value});
+      if (depth > this.maxDepth) this.maxDepth = depth;
+      let cx = x;
+      // Sort largest first for visual stability
+      for (const child of [...node.children.values()].sort((a,b) => b.value - a.value)) {
+        const cw = w * child.value / node.value;
+        walk(child, cx, cw, depth + 1);
+        cx += cw;
+      }
+    };
+    walk(this.zoomRoot, 0, W, 0);
+    const newH = (this.maxDepth + 2) * this.FRAME_H;
+    if (this.canvas.height !== newH) this.canvas.height = newH;
+  }
+
+  render() {
+    const ctx = this.ctx;
+    const W = this.canvas.width, H = this.canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, W, H);
+
+    const srch = this.searchTerm.toLowerCase();
+
+    for (const f of this._frames) {
+      const y       = f.depth * this.FRAME_H;
+      const isRoot  = f.node === this.zoomRoot;
+      const matched = srch && f.name.toLowerCase().includes(srch);
+      const dimmed  = srch && !matched;
+
+      ctx.fillStyle = isRoot   ? '#21262d'
+                    : matched  ? '#e3b341'
+                    : dimmed   ? '#14191f'
+                    : `hsl(${this._hue(this._shortName(f.name))},68%,36%)`;
+      ctx.fillRect(f.x + 0.5, y + 0.5, Math.max(f.width - 1, 0.5), this.FRAME_H - 1);
+
+      if (f.width > 2) {
+        ctx.strokeStyle = '#0d1117';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(f.x + 0.5, y + 0.5, f.width - 1, this.FRAME_H - 1);
+      }
+
+      if (f.width >= 16) {
+        ctx.fillStyle    = dimmed ? 'rgba(255,255,255,0.18)' : matched ? '#000' : 'rgba(255,255,255,0.9)';
+        ctx.font         = '500 11px "SF Mono","Fira Code",monospace';
+        ctx.textBaseline = 'middle';
+        const label    = this._shortName(f.name);
+        const maxChars = Math.floor((f.width - 8) / 6.6);
+        const text     = maxChars >= 3 ? (label.length > maxChars ? label.slice(0, maxChars - 1) + '…' : label) : '';
+        if (text) ctx.fillText(text, f.x + 4, y + this.FRAME_H / 2);
+      }
+    }
+
+    // Root bar highlight
+    if (this._frames[0]) {
+      ctx.fillStyle = 'rgba(88,166,255,0.08)';
+      ctx.fillRect(0, 0, W, this.FRAME_H);
+      ctx.fillStyle = '#58a6ff';
+      ctx.font = '600 12px system-ui,sans-serif';
+      ctx.textBaseline = 'middle';
+      const lbl = this.zoomRoot === this._root
+        ? `all  (${this.totalSamples.toLocaleString()} samples — click any frame to zoom)`
+        : `zoomed: ${this._shortName(this.zoomRoot.name)}  (← use toolbar to zoom out)`;
+      ctx.fillText(lbl, 10, this.FRAME_H / 2);
+    }
+  }
+
+  _shortName(name) {
+    const m = name.match(/^(.+?)\s+\(/);
+    return m ? m[1] : name;
+  }
+
+  _hue(name) {
+    let h = 5381;
+    for (let i = 0; i < name.length; i++) h = ((h << 5) + h) ^ name.charCodeAt(i);
+    return (Math.abs(h) % 48) + 6; // warm red/orange 6–54
+  }
+
+  _coords(e) {
+    const r = this.canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - r.left)  * (this.canvas.width  / r.width),
+      y: (e.clientY - r.top)   * (this.canvas.height / r.height),
+    };
+  }
+
+  _hit(x, y) {
+    const depth = Math.floor(y / this.FRAME_H);
+    for (const f of this._frames)
+      if (f.depth === depth && x >= f.x && x < f.x + f.width) return f;
+    return null;
+  }
+
+  _onClick(e) {
+    const {x, y} = this._coords(e);
+    const f = this._hit(x, y);
+    if (!f || f.node === this.zoomRoot) return;
+    this.zoomStack.push(this.zoomRoot);
+    this.zoomRoot = f.node;
+    this._layout();
+    this.render();
+    fgSyncZoomBtn();
+  }
+
+  _onMouseMove(e) {
+    const {x, y} = this._coords(e);
+    const f = this._hit(x, y);
+    if (f) {
+      this.canvas.style.cursor = 'pointer';
+      const pct  = (f.value / this.totalSamples * 100).toFixed(1);
+      const self = f.value - [...f.node.children.values()].reduce((s,c) => s + c.value, 0);
+      const sp   = (self / this.totalSamples * 100).toFixed(1);
+      this.tip.style.display = 'block';
+      this.tip.style.left    = (e.clientX + 14) + 'px';
+      this.tip.style.top     = (e.clientY + 10) + 'px';
+      this.tip.innerHTML =
+        `<span class="fg-tip-name">${esc(f.name)}</span>` +
+        `<span class="fg-tip-pct">${pct}%</span> of samples (${f.value.toLocaleString()})` +
+        (self > 0 ? `<br><span class="fg-tip-self">self: ${sp}% (${self.toLocaleString()})</span>` : '') +
+        `<br><span class="fg-tip-hint">Click to zoom in</span>`;
+    } else {
+      this.canvas.style.cursor = 'default';
+      this.tip.style.display = 'none';
+    }
+  }
+
+  _onMouseLeave() {
+    this.tip.style.display = 'none';
+    this.canvas.style.cursor = 'default';
+  }
+
+  zoomOut()   { if (!this.zoomStack.length) return; this.zoomRoot = this.zoomStack.pop(); this._layout(); this.render(); }
+  resetZoom() { this.zoomStack = []; this.zoomRoot = this._root; this._layout(); this.render(); }
+  setSearch(t) { this.searchTerm = t; this.render(); }
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────
