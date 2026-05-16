@@ -21,6 +21,7 @@ A real-time Linux process performance dashboard. Select any running process, wat
 - [What to Look For](#what-to-look-for)
 - [The System Strip](#the-system-strip)
 - [Stressor Reference](#stressor-reference)
+- [Optional System Settings](#optional-system-settings)
 
 ---
 
@@ -388,19 +389,58 @@ To check if it's installed:
 python3 -c "import psutil; print(psutil.__version__)"
 ```
 
-## Enabling Hardware Performance Counters
+## Optional System Settings
 
-Perf counters (IPC, cache misses, branch mispredictions) require relaxing the kernel security setting:
+Two kernel settings unlock additional PerfWatch features. Both are off by default on most Linux distributions as a security precaution. Neither is required — PerfWatch runs fine without them and explains clearly in the UI when a feature is unavailable.
+
+### Flamegraph Profiling — `kernel.yama.ptrace_scope`
+
+The 🔥 **Profile** button uses [py-spy](https://github.com/benfred/py-spy) to sample call stacks of Python processes. py-spy reads process memory via `ptrace`. When `ptrace_scope=1` (the default), Linux restricts ptrace to parent→child relationships only, which blocks py-spy from attaching to an already-running process.
+
+Setting it to `0` allows any process to ptrace any other process **owned by the same user** — root is not required.
 
 ```bash
-# Check current value (4 = fully blocked, 1 = unprivileged allowed)
-cat /proc/sys/kernel/perf_event_paranoid
+# Check current value
+cat /proc/sys/kernel/yama/ptrace_scope
+# 0 = unrestricted (same user)   1 = restricted (default)
+# 2 = admin only                 3 = no ptrace at all
 
-# Allow unprivileged access (non-persistent, resets on reboot)
-sudo sysctl kernel.perf_event_paranoid=1
+# Allow for this session only (resets on reboot)
+sudo sysctl kernel.yama.ptrace_scope=0
 
-# Make it persistent
-echo 'kernel.perf_event_paranoid=1' | sudo tee -a /etc/sysctl.conf
+# Make it permanent
+echo 'kernel.yama.ptrace_scope=0' | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
 ```
 
-The default on many distros (including Ubuntu 20.04+) is `4`, which blocks all hardware counter access. Setting it to `1` allows unprivileged processes to use counters but prevents access to kernel-mode events.
+### Hardware Perf Counters — `kernel.perf_event_paranoid`
+
+The **Perf Counters** card shows IPC, cache miss %, and branch miss % using `perf stat`. When `perf_event_paranoid` is 2 or higher (default on Ubuntu 20.04+), unprivileged access to hardware CPU counters is blocked.
+
+Setting it to `1` allows unprivileged access to CPU counters while still blocking kernel-mode event tracing.
+
+```bash
+# Check current value
+cat /proc/sys/kernel/perf_event_paranoid
+# 4 = fully blocked   2 = default on Ubuntu   1 = unprivileged allowed   -1 = unrestricted
+
+# Allow for this session only (resets on reboot)
+sudo sysctl kernel.perf_event_paranoid=1
+
+# Make it permanent
+echo 'kernel.perf_event_paranoid=1' | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+### Enable Both at Once
+
+```bash
+# Apply immediately
+sudo sysctl kernel.yama.ptrace_scope=0 kernel.perf_event_paranoid=1
+
+# Make permanent — appends both lines to /etc/sysctl.conf
+printf 'kernel.yama.ptrace_scope=0\nkernel.perf_event_paranoid=1\n' | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+> **Security note:** These settings apply system-wide, not just to PerfWatch. `ptrace_scope=0` in particular allows any process you run to inspect the memory of your other processes. On a personal dev machine this is generally fine; on a multi-user or internet-exposed server, consider keeping the defaults and running PerfWatch as root only when you need profiling.
