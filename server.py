@@ -273,7 +273,7 @@ def run_perf_stat(pid: int) -> dict:
             capture_output=True, text=True, timeout=5
         )
         output = result.stderr
-        if 'Access to performance monitoring' in output or 'not supported' in output.lower():
+        if 'Access to performance monitoring' in output:
             paranoid = _read_perf_paranoid()
             target = 0 if paranoid <= 1 else 1
             return {
@@ -303,6 +303,10 @@ def run_perf_stat(pid: int) -> dict:
         cache_refs   = counters.get('cache-references')
         br_misses    = counters.get('branch-misses')
         branches     = counters.get('branches')
+
+        # perf ran but hardware PMU unavailable (VM, snap sandbox, no PMU driver)
+        if cycles is None and instructions is None and '<not supported>' in output:
+            return {'available': False, 'reason': 'hw_unavailable'}
 
         out = {'available': True, 'raw': counters}
         if cycles and instructions and cycles > 0:

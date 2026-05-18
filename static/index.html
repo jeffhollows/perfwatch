@@ -1794,6 +1794,21 @@ function renderPerfCard(d) {
         `To make it permanent:`,
         `echo kernel.perf_event_paranoid=1 | sudo tee -a /etc/sysctl.conf`,
       ];
+    } else if (d.reason === 'hw_unavailable') {
+      msg = 'Hardware PMU counters not available in this environment.';
+      tipLines = [
+        `perf ran successfully but the hardware CPU cycle`,
+        `and instruction counters reported <not supported>.`,
+        ``,
+        `This is normal in:`,
+        `  • Virtual machines (KVM, VMware, VirtualBox)`,
+        `  • Snap/Flatpak sandboxed processes`,
+        `  • Kernels built without PMU driver support`,
+        ``,
+        `Context-switch and page-fault counts still work;`,
+        `IPC, cache miss %, and branch miss % require`,
+        `hardware PMU access and cannot be shown here.`,
+      ];
     } else if (d.reason === 'perf_not_found') {
       msg = 'The perf tool is not installed.';
       tipLines = [
@@ -1832,7 +1847,10 @@ function renderPerfCard(d) {
         </div>
         <div class="card-body">
           <div class="perf-unavail">${esc(msg)}${fixHtml}</div>
-          <div class="card-description">Hardware counters measure CPU micro-architecture events: instructions per cycle (IPC), cache miss rate, branch mispredictions. High IPC (&gt;2) = efficient code. Low IPC with high CPU = cache thrashing. Requires kernel.perf_event_paranoid ≤ 1.</div>
+          <div class="card-description">${d.reason === 'hw_unavailable'
+            ? 'Hardware PMU (Performance Monitoring Unit) counters require bare-metal CPU access. They are not available inside virtual machines, snap/Flatpak sandboxes, or kernels built without PMU driver support. No kernel setting can enable them in these environments.'
+            : 'Hardware counters measure CPU micro-architecture events: instructions per cycle (IPC), cache miss rate, branch mispredictions. High IPC (&gt;2) = efficient code. Low IPC with high CPU = cache thrashing. Requires kernel.perf_event_paranoid ≤ 1.'
+          }</div>
         </div>
       </div>`;
   }
