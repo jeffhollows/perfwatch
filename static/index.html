@@ -461,26 +461,52 @@ input:focus { border-color: var(--accent); }
 .stressor-header {
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
-  padding: 8px 14px;
+  border-left: 3px solid var(--warning);
+  padding: 11px 14px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
   user-select: none;
-  transition: background 0.1s;
+  transition: background 0.15s;
+  background: rgba(210,153,34,0.05);
 }
-.stressor-header:hover { background: var(--bg3); }
+.stressor-header:hover { background: rgba(210,153,34,0.11); }
 
 .stressor-chevron {
-  color: var(--text-dimmer);
-  font-size: 15px;
+  color: var(--warning);
+  font-size: 18px;
+  font-weight: 700;
   transition: transform 0.2s;
   display: inline-block;
   line-height: 1;
+  flex-shrink: 0;
 }
 .stressor-chevron.open { transform: rotate(90deg); }
 
-.stressor-header .sidebar-title { margin: 0; flex: 1; }
+.stressor-header-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.stressor-header-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--warning);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stressor-header-sub {
+  font-size: 11px;
+  color: var(--text-dimmer);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .stressor-run-count {
   font-size: 12px;
@@ -932,7 +958,7 @@ input:focus { border-color: var(--accent); }
   padding: 14px 20px;
   flex-shrink: 0;
   overflow-y: auto;
-  max-height: 280px;
+  max-height: 340px;
 }
 .fg-guide.open { display: block; }
 .fg-guide-btn.active { border-color: var(--accent); color: var(--accent); }
@@ -942,27 +968,33 @@ input:focus { border-color: var(--accent); }
   gap: 20px;
 }
 .fg-guide-heading {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
-  text-transform: uppercase; color: var(--text-dimmer); margin-bottom: 8px;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-dimmer); margin-bottom: 10px;
 }
 .fg-guide-list {
   list-style: none; padding: 0; margin: 0;
-  display: flex; flex-direction: column; gap: 7px;
+  display: flex; flex-direction: column; gap: 10px;
 }
 .fg-guide-list li {
-  font-size: 12px; color: var(--text-dim); line-height: 1.55;
-  display: flex; align-items: flex-start; gap: 7px;
+  font-size: 14px; color: var(--text-dim); line-height: 1.6;
+  display: flex; align-items: flex-start; gap: 9px;
 }
 .fg-guide-list strong { color: var(--text); font-weight: 600; }
 .fg-guide-list em { color: var(--text); font-style: normal; font-weight: 500; }
 .fg-guide-pill {
   display: inline-block; flex-shrink: 0;
-  font-size: 10px; font-weight: 700; font-family: var(--font);
-  padding: 1px 6px; border-radius: 3px; color: rgba(255,255,255,0.85);
-  margin-top: 1px;
+  font-size: 11px; font-weight: 700; font-family: var(--font);
+  padding: 2px 8px; border-radius: 3px; color: rgba(255,255,255,0.85);
+  margin-top: 2px;
 }
 
 .fg-canvas { display: block; }
+
+.fg-kernel-note {
+  font-size: 13px; color: var(--warning); background: rgba(210,153,34,0.1);
+  border-bottom: 1px solid rgba(210,153,34,0.3);
+  padding: 10px 16px; line-height: 1.55;
+}
 
 /* Start panel */
 .fg-panel {
@@ -991,15 +1023,38 @@ input:focus { border-color: var(--accent); }
 .fg-mono { font-family: var(--font); font-size: 11px; background: var(--bg3); padding: 1px 6px; border-radius: 3px; }
 
 /* Countdown */
-.fg-countdown-big { font-size: 52px; font-family: var(--font); color: var(--warning); font-weight: 700; line-height: 1; }
+.fg-countdown-big { font-size: 52px; font-family: var(--font); color: var(--warning); font-weight: 700; line-height: 1; min-height: 56px; display: flex; align-items: center; justify-content: center; }
 .fg-pbar-wrap { width: 280px; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
 .fg-pbar { height: 100%; background: var(--warning); border-radius: 3px; transition: width 0.9s linear; width: 0%; }
+
+@keyframes fg-spin  { to { transform: rotate(360deg); } }
+@keyframes fg-pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+.fg-spinner {
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 3px solid rgba(210,153,34,0.25);
+  border-top-color: var(--warning);
+  animation: fg-spin 0.75s linear infinite;
+}
+.fg-pbar-pulse { width: 100% !important; transition: none !important; animation: fg-pulse 1.2s ease-in-out infinite; }
 
 /* Error/info */
 .fg-info-icon  { font-size: 44px; }
 .fg-info-title { font-size: 16px; font-weight: 600; color: var(--text); }
 .fg-info-msg   { font-size: 13px; color: var(--text-dim); max-width: 460px; line-height: 1.65; white-space: pre-line; }
-.fg-info-cmd   { font-family: var(--font); font-size: 12px; background: var(--bg3); padding: 8px 14px; border-radius: 5px; color: var(--text); }
+.fg-info-cmd   { font-family: var(--font); font-size: 12px; background: var(--bg3); border-radius: 5px; color: var(--text); overflow: hidden; }
+.fg-cmd-row    { display: flex; align-items: center; gap: 10px; padding: 8px 14px; }
+.fg-cmd-row + .fg-cmd-row { border-top: 1px solid var(--border); }
+.fg-cmd-text   { flex: 1; word-break: break-all; }
+.fg-copy-btn   { flex-shrink: 0; background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--text-dim); cursor: pointer; font-family: var(--font); font-size: 11px; padding: 2px 8px; transition: color 0.15s, border-color 0.15s; }
+.fg-copy-btn:hover  { color: var(--text); border-color: var(--accent); }
+.fg-copy-btn.copied { color: #4caf82; border-color: #4caf82; }
+#copy-toast {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+  background: #1e2a1e; border: 1px solid #4caf82; color: #4caf82;
+  font-family: var(--font); font-size: 13px; padding: 8px 20px; border-radius: 6px;
+  pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 9999;
+}
+#copy-toast.show { opacity: 1; }
 
 /* Flamegraph tooltip */
 .fg-tip {
@@ -1015,6 +1070,7 @@ input:focus { border-color: var(--accent); }
 </style>
 </head>
 <body>
+<div id="copy-toast">✓ Copied to clipboard</div>
 
 <header>
   <div class="logo">Perf<span>Watch</span></div>
@@ -1035,9 +1091,12 @@ input:focus { border-color: var(--accent); }
   <aside class="sidebar">
 
     <!-- Stressor control panel — at top for visibility -->
-    <div class="stressor-header" id="stressor-toggle">
-      <span class="stressor-chevron open" id="stressor-chevron">›</span>
-      <span class="sidebar-title">Test Stressors</span>
+    <div class="stressor-header" id="stressor-toggle" title="Expand to run load simulations for testing and learning PerfWatch">
+      <span class="stressor-chevron" id="stressor-chevron">›</span>
+      <div class="stressor-header-text">
+        <div class="stressor-header-title">⚗ Test Stressors</div>
+        <div class="stressor-header-sub" id="stressor-header-sub">Click to expand — load simulation &amp; profiling demos</div>
+      </div>
       <span class="stressor-run-count" id="stressor-run-count"></span>
     </div>
     <div class="stressor-body" id="stressor-body">
@@ -1048,7 +1107,7 @@ input:focus { border-color: var(--accent); }
     <div class="sidebar-header">
       <div class="sidebar-title">Processes</div>
       <div class="search-row">
-        <input type="search" id="search-input" placeholder="Filter by name or command…" autocomplete="off">
+        <input type="search" id="search-input" placeholder="Filter by name, PID, or command…" autocomplete="off">
       </div>
       <label class="toggle-row" title="Hide root/daemon/system service processes">
         <label class="toggle">
@@ -2100,14 +2159,17 @@ async function fetchPerfCounters(pid) {
 
 // ── Stressor panel ────────────────────────────────────────────────
 
-let stressorPanelOpen = true;
+let stressorPanelOpen = false;
 
 $('stressor-toggle').addEventListener('click', () => {
   stressorPanelOpen = !stressorPanelOpen;
   $('stressor-chevron').classList.toggle('open', stressorPanelOpen);
+  const sub = $('stressor-header-sub');
   if (stressorPanelOpen) {
+    if (sub) sub.textContent = 'Click to collapse';
     loadStressors();          // renders content, then expandStressorPanel() fires
   } else {
+    if (sub) sub.textContent = 'Click to expand — load simulation & profiling demos';
     $('stressor-body').style.maxHeight = '0';
   }
 });
@@ -2135,8 +2197,12 @@ function renderStressors(stressors) {
   if (running > 0) {
     countEl.textContent = `${running} running`;
     countEl.classList.add('visible');
+    const sub = $('stressor-header-sub');
+    if (sub && !stressorPanelOpen) sub.textContent = `${running} stressor${running > 1 ? 's' : ''} running — click to expand`;
   } else {
     countEl.classList.remove('visible');
+    const sub = $('stressor-header-sub');
+    if (sub && !stressorPanelOpen) sub.textContent = 'Click to expand — load simulation & profiling demos';
   }
 
   $('stressor-list').innerHTML = stressors.map(s => {
@@ -2299,13 +2365,21 @@ async function startFgProfile() {
     </div>`;
 
   const t0 = Date.now();
+  let processing = false;
   fgCdTimer = setInterval(() => {
-    const el = (Date.now() - t0) / 1000;
+    const el  = (Date.now() - t0) / 1000;
     const rem = Math.max(0, dur - Math.floor(el));
     const pct = Math.min(el / dur * 100, 100);
-    const cd = $('fg-cd'), pb = $('fg-pbar');
-    if (cd) cd.textContent = rem + 's';
-    if (pb) pb.style.width = pct + '%';
+    const cd  = $('fg-cd'), pb = $('fg-pbar'), lbl = $('fg-plabel');
+    if (rem > 0) {
+      if (cd) cd.textContent = rem + 's';
+      if (pb) pb.style.width = pct + '%';
+    } else if (!processing) {
+      processing = true;
+      if (cd)  { cd.innerHTML = '<div class="fg-spinner"></div>'; }
+      if (lbl) { lbl.textContent = 'Processing data — generating flamegraph…'; }
+      if (pb)  { pb.classList.add('fg-pbar-pulse'); }
+    }
   }, 200);
 
   try {
@@ -2324,7 +2398,35 @@ function showFgError(d) {
     py_spy_not_found: ['📦', 'py-spy not installed',
       'Install it with:', d.install || 'pip install py-spy'],
     not_python: ['🐍', 'Not a Python process',
-      'py-spy can only profile Python processes without root privileges.\nTo profile any process, run PerfWatch as root (see README security notes).', ''],
+      'py-spy could not identify this as a Python process, and perf is also unavailable as a fallback.\n\nInstall perf to profile any process type:', 'sudo apt install linux-perf'],
+    perf_not_found: ['🔧', 'perf not installed',
+      'This is not a Python process, so py-spy cannot profile it.\nInstall perf to profile any process type (C, Rust, Go, Java, etc.):', 'sudo apt install linux-perf  # or linux-tools-$(uname -r)'],
+    perf_paranoid: ['🔒', 'perf permission denied',
+      'perf could not attach to the process. One or more kernel settings need adjusting:\n\n' +
+      (d.detail ? `perf said: ${d.detail}\n\n` : '') +
+      'Commands to try (each resets on reboot):',
+      d.fix || 'sudo sysctl kernel.perf_event_paranoid=0'],
+    perf_mlock: ['🔒', 'perf ring-buffer limit too low',
+      'perf could not map its ring buffer — the kernel memory-lock limit for perf is set too low.\n\n' +
+      (d.detail ? `perf said: ${d.detail}\n\n` : '') +
+      'Raise the limit (resets on reboot):',
+      d.fix || 'sudo sysctl kernel.perf_event_mlock_kb=16384'],
+    perf_sandboxed: (() => {
+      const name = (d.proc_name || '').toLowerCase();
+      const isChromium = /brave|chrome|chromium|electron/.test(name);
+      const grepName = name || 'process-name';
+      const cmd = isChromium
+        ? `ps -eo pid,args | grep -i ${grepName} | grep -v renderer | grep -v gpu | grep -v zygote`
+        : `ps -eo pid,args | grep -i ${grepName} | grep -v grep`;
+      return ['🏖', 'Process is sandboxed',
+        'All kernel settings are already correct, but perf still cannot attach.\n\n' +
+        'This process is likely running inside a seccomp/namespace sandbox. ' +
+        'Snap, Flatpak, Brave, Chrome, and Electron apps can all restrict perf — ' +
+        'sandboxed processes block perf unconditionally and no kernel setting can override this.\n\n' +
+        'Find the unsandboxed main process and select that PID instead:' +
+        (d.detail ? `\n\nperf said: ${d.detail}` : ''),
+        cmd];
+    })(),
     permission: ['🔒', 'Permission denied',
       'py-spy uses ptrace to read call stacks. The kernel ptrace_scope setting is currently blocking this.' +
       (d.ptrace_scope !== undefined ? `\n\nkernel.yama.ptrace_scope = ${d.ptrace_scope}` : '') +
@@ -2335,7 +2437,8 @@ function showFgError(d) {
     no_data: ['📭', 'No samples collected',
       d.detail || 'py-spy ran but produced no stack samples — the process may have been idle.', ''],
     timeout: ['⏱', 'Timed out',
-      'Profiling took too long to complete.', ''],
+      'Profiling took too long to complete.\n\n' +
+      'For large native processes (GNOME Shell, desktop apps), try a shorter duration — 5 seconds is usually enough to get a useful flamegraph.', ''],
   };
   const [icon, title, msg, cmd] = msgs[d.reason] || ['⚠️', 'Profiling failed', d.detail || 'Unknown error', ''];
   $('fg-body').innerHTML = `
@@ -2343,15 +2446,73 @@ function showFgError(d) {
       <div class="fg-info-icon">${icon}</div>
       <div class="fg-info-title">${esc(title)}</div>
       <div class="fg-info-msg">${esc(msg)}</div>
-      ${cmd ? `<div class="fg-info-cmd">${esc(cmd)}</div>` : ''}
+      ${renderCmdBox(cmd)}
       <button class="fg-go" style="margin-top:12px;padding:8px 28px;font-size:13px" onclick="showFgStart()">← Back</button>
     </div>`;
 }
 
+function renderCmdBox(cmd) {
+  if (!cmd) return '';
+  const lines = cmd.split('\n').map(l => l.trim()).filter(Boolean);
+  const rows = lines.map(line => `
+    <div class="fg-cmd-row">
+      <span class="fg-cmd-text">${esc(line)}</span>
+      <button class="fg-copy-btn" data-cmd="${esc(line)}" onclick="copyCmd(this)">Copy</button>
+    </div>`).join('');
+  return `<div class="fg-info-cmd">${rows}</div>`;
+}
+
+let _toastTimer = null;
+function showToast(success) {
+  const toast = document.getElementById('copy-toast');
+  if (success) {
+    toast.textContent = '✓ Copied to clipboard';
+    toast.style.background = '#1e2a1e';
+    toast.style.borderColor = '#4caf82';
+    toast.style.color = '#4caf82';
+  } else {
+    toast.textContent = 'Copy failed — please copy manually';
+    toast.style.background = '#2a1e1e';
+    toast.style.borderColor = '#cf6679';
+    toast.style.color = '#cf6679';
+  }
+  toast.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => toast.classList.remove('show'), success ? 1800 : 2500);
+}
+
+function copyCmd(btn) {
+  const text = btn.dataset.cmd;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => showToast(true)).catch(() => showToast(false));
+  } else {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast(true);
+    } catch(e) {
+      showToast(false);
+    }
+  }
+}
+
 function showFgGraph(data) {
   $('fg-toolbar').style.display = 'flex';
-  $('fg-subtitle').textContent  = `${data.duration}s · ${(data.samples||0).toLocaleString()} samples`;
-  $('fg-body').innerHTML = '<canvas id="fg-canvas" class="fg-canvas"></canvas>';
+  $('fg-subtitle').textContent  = `${data.duration}s · ${(data.samples||0).toLocaleString()} samples · ${data.profiler || 'unknown'}`;
+
+  const samplesPerSec = (data.samples || 0) / data.duration;
+  const kernelWarning = samplesPerSec < 20
+    ? `<div class="fg-kernel-note">⚠ Very few Python frames captured (${data.samples} samples in ${data.duration}s). ` +
+      `This process likely spends most of its time in kernel or native C code — ` +
+      `py-spy only profiles Python frames, so syscall-heavy or C-extension-heavy ` +
+      `processes will appear nearly empty here.</div>`
+    : '';
+  $('fg-body').innerHTML = kernelWarning + '<canvas id="fg-canvas" class="fg-canvas"></canvas>';
 
   const canvas = $('fg-canvas');
   const body   = $('fg-body');
@@ -2418,6 +2579,8 @@ class FlamegraphRenderer {
   }
 
   load(folded) {
+    // Frames py-spy always prepends that carry no useful call-stack information
+    const NOISE = new Set(['_bootstrap', '_bootstrap_inner']);
     const root = {name:'all', value:0, children:new Map(), parent:null};
     for (const raw of folded.trim().split('\n')) {
       const line = raw.trim();
@@ -2425,7 +2588,9 @@ class FlamegraphRenderer {
       const sp = line.lastIndexOf(' ');
       if (sp < 0) continue;
       const count  = parseInt(line.slice(sp + 1));
-      const frames = line.slice(0, sp).split(';').map(f => f.trim()).filter(Boolean);
+      // Thread-name stripping and noise filtering are done server-side
+      const frames = line.slice(0, sp).split(';').map(f => f.trim()).filter(Boolean)
+                         .filter(f => !NOISE.has(f.split(' (')[0].trim()));
       if (!frames.length || isNaN(count)) continue;
       let node = root;
       node.value += count;
@@ -2438,8 +2603,16 @@ class FlamegraphRenderer {
     }
     this._root = root;
     this.totalSamples = root.value;
-    this.zoomRoot  = root;
+    // Auto-skip pass-through frames (single-child nodes) to the first real
+    // branch point so the view opens on meaningful content immediately.
+    // zoomStack is pre-populated so Zoom out / Reset zoom still work.
     this.zoomStack = [];
+    let cur = root;
+    while (cur.children.size === 1) {
+      this.zoomStack.push(cur);
+      cur = [...cur.children.values()][0];
+    }
+    this.zoomRoot = cur;
     this._layout();
     this.render();
   }

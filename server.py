@@ -333,14 +333,44 @@ def _read_ptrace_scope() -> int:
         return -1
 
 
-def run_profile(pid: int, duration: int = 10) -> dict:
-    """Sample call stacks via py-spy; return folded stacks for flamegraph rendering."""
-    if not PY_SPY_PATH:
-        return {
-            'available': False,
-            'reason': 'py_spy_not_found',
-            'install': 'pip install py-spy',
-        }
+# Frames py-spy always prepends that carry no call-stack information
+_PYSPY_NOISE = frozenset({'_bootstrap', '_bootstrap_inner'})
+
+
+def _strip_pyspy_noise(folded: str) -> str:
+    """Strip thread-name prefix and Python threading internals from py-spy raw output."""
+    lines = []
+    for raw in folded.strip().split('\n'):
+        line = raw.strip()
+        if not line:
+            continue
+        sp = line.rfind(' ')
+        if sp < 0:
+            continue
+        count  = line[sp + 1:]
+        frames = line[:sp].split(';')
+        # frames[0] is always the thread name; skip it and filter bootstrap noise
+        cleaned = [f for f in frames[1:]
+                   if f.split(' (')[0].strip() not in _PYSPY_NOISE]
+        if cleaned:
+            lines.append(';'.join(cleaned) + ' ' + count)
+    return '\n'.join(lines)
+
+
+def _count_samples(folded: str) -> int:
+    total = 0
+    for line in folded.strip().split('\n'):
+        line = line.strip()
+        if line:
+            try:
+                total += int(line.rsplit(' ', 1)[-1])
+            except ValueError:
+                pass
+    return total
+
+
+def _run_pyspy_profile(pid: int, duration: int) -> dict:
+    """Sample call stacks via py-spy; return cleaned folded stacks."""
     tmp = f'/tmp/perfwatch_profile_{pid}_{int(time.time())}.txt'
     try:
         result = subprocess.run(
@@ -350,12 +380,15 @@ def run_profile(pid: int, duration: int = 10) -> dict:
              '--format', 'raw',
              '--output', tmp],
             capture_output=True, text=True,
-            timeout=duration + 15,
+            timeout=duration + 45,
         )
         combined = (result.stderr + result.stdout).lower()
         if result.returncode != 0:
-            if 'not a python' in combined or 'could not get' in combined or 'unable to connect' in combined:
-                return {'available': False, 'reason': 'not_python',   'detail': result.stderr.strip()[:300]}
+            if any(p in combined for p in (
+                'not a python', 'could not get', 'unable to connect',
+                'failed to find python', 'python version', 'not appear to be',
+            )):
+                return {'available': False, 'reason': 'not_python', 'detail': result.stderr.strip()[:300]}
             if 'permission' in combined or 'operation not permitted' in combined:
                 scope = _read_ptrace_scope()
                 return {
@@ -365,32 +398,25 @@ def run_profile(pid: int, duration: int = 10) -> dict:
                     'detail': result.stderr.strip()[:300],
                 }
             if 'no such process' in combined or 'process has already' in combined:
-                return {'available': False, 'reason': 'no_process',   'detail': result.stderr.strip()[:300]}
-            return {'available': False, 'reason': 'error',            'detail': (result.stderr + result.stdout).strip()[:400]}
+                return {'available': False, 'reason': 'no_process', 'detail': result.stderr.strip()[:300]}
+            return {'available': False, 'reason': 'error', 'detail': (result.stderr + result.stdout).strip()[:400]}
 
         with open(tmp) as f:
-            data = f.read()
+            raw_data = f.read()
 
-        if not data.strip():
+        if not raw_data.strip():
             return {'available': False, 'reason': 'no_data',
                     'detail': 'py-spy ran but collected no samples — try a longer duration or verify the process is still running.'}
 
-        sample_count = 0
-        for line in data.strip().split('\n'):
-            line = line.strip()
-            if line:
-                try:
-                    sample_count += int(line.rsplit(' ', 1)[-1])
-                except ValueError:
-                    pass
-
+        data = _strip_pyspy_noise(raw_data)
         return {
             'available': True,
+            'profiler':  'py-spy',
             'format':    'folded',
             'data':      data,
             'duration':  duration,
             'pid':       pid,
-            'samples':   sample_count,
+            'samples':   _count_samples(data),
         }
     except subprocess.TimeoutExpired:
         return {'available': False, 'reason': 'timeout'}
@@ -405,12 +431,172 @@ def run_profile(pid: int, duration: int = 10) -> dict:
             pass
 
 
+def _fold_perf_script(text: str) -> str:
+    """Convert perf script call-graph output to folded stacks format."""
+    stacks: dict = {}
+    current: list = []
+    for line in text.splitlines():
+        if not line.strip():
+            if current:
+                key = ';'.join(reversed(current))
+                stacks[key] = stacks.get(key, 0) + 1
+                current = []
+        elif line[0] in (' ', '\t'):
+            # Frame line: "\t\t addr symbol[+offset] (dso)"
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                sym = parts[1].split('+')[0]
+                if sym and sym != '[unknown]':
+                    current.append(sym)
+        # else: sample header line — stack resets on next blank line
+    if current:
+        key = ';'.join(reversed(current))
+        stacks[key] = stacks.get(key, 0) + 1
+    return '\n'.join(f'{k} {v}' for k, v in stacks.items() if k)
+
+
+def _run_perf_profile(pid: int, duration: int) -> dict:
+    """Record call stacks with perf record for any process type."""
+    perf = shutil.which('perf')
+    if not perf:
+        return {
+            'available': False,
+            'reason':    'perf_not_found',
+            'install':   'sudo apt install linux-perf  # or linux-tools-$(uname -r)',
+        }
+
+    paranoid = _read_perf_paranoid()
+    if paranoid > 1:
+        return {
+            'available': False,
+            'reason':    'perf_paranoid',
+            'paranoid':  paranoid,
+            'fix':       f'sudo sysctl kernel.perf_event_paranoid=1   (currently {paranoid})',
+        }
+
+    data_file = f'/tmp/perfwatch_perf_{pid}_{int(time.time())}.data'
+    try:
+        rec = subprocess.run(
+            # -F 49: 49 Hz keeps data volume manageable for busy processes like browsers
+            # -m 8M: ring buffer per-CPU; must stay below perf_event_mlock_kb (default 16MB)
+            [perf, 'record', '-g', '-F', '49', '-m', '8M', '-p', str(pid),
+             '-o', data_file, '--', 'sleep', str(duration)],
+            capture_output=True, text=True,
+            timeout=duration + 45,
+        )
+        combined = (rec.stderr + rec.stdout).lower()
+        if rec.returncode != 0:
+            # Strip the common kptr_restrict preamble perf always prints so we
+            # can see the actual error underneath it.
+            _KPTR_PREAMBLE = 'WARNING: Kernel address maps'
+            stderr_clean = rec.stderr.strip()
+            preamble_end = stderr_clean.find('\n\n', stderr_clean.find(_KPTR_PREAMBLE)) if _KPTR_PREAMBLE in stderr_clean else -1
+            actual_error = stderr_clean[preamble_end:].strip() if preamble_end >= 0 else stderr_clean
+            actual_lower = actual_error.lower()
+
+            if 'mlock' in actual_lower or 'mlock_kb' in actual_lower:
+                current_mlock = _read_perf_mlock_kb()
+                if current_mlock < 4096:
+                    return {
+                        'available': False,
+                        'reason':    'perf_mlock',
+                        'current':   current_mlock,
+                        'fix':       f'sudo sysctl kernel.perf_event_mlock_kb=16384   (currently {current_mlock})',
+                        'detail':    actual_error[:400],
+                    }
+                # mlock is already adequate — fall through; likely a sandboxed process
+            if 'permission' in actual_lower or 'not permitted' in actual_lower or \
+               ('paranoid' in actual_lower and 'warning' not in actual_lower.split('paranoid')[0][-30:]) or \
+               'mlock' in actual_lower:
+                current_paranoid = _read_perf_paranoid()
+                current_ptrace   = _read_ptrace_scope()
+                # All kernel settings already correct — process is likely sandboxed
+                if current_paranoid <= 1 and current_ptrace <= 0:
+                    try:
+                        proc_name = psutil.Process(pid).name()
+                    except Exception:
+                        proc_name = ''
+                    return {
+                        'available': False,
+                        'reason':    'perf_sandboxed',
+                        'proc_name': proc_name,
+                        'detail':    actual_error[:400],
+                    }
+                fixes = []
+                target = 0 if current_paranoid <= 1 else 1
+                fixes.append(f'sudo sysctl kernel.perf_event_paranoid={target}   (currently {current_paranoid})')
+                if current_ptrace > 0:
+                    fixes.append(f'sudo sysctl kernel.yama.ptrace_scope=0   (currently {current_ptrace})')
+                return {
+                    'available': False,
+                    'reason':    'perf_paranoid',
+                    'paranoid':  current_paranoid,
+                    'fix':       '\n'.join(fixes),
+                    'detail':    actual_error[:400],
+                }
+            if 'no such process' in actual_lower or ('attach' in actual_lower and 'failed' in actual_lower):
+                return {'available': False, 'reason': 'no_process', 'detail': actual_error[:300]}
+            return {'available': False, 'reason': 'error', 'detail': actual_error[:400]}
+
+        script = subprocess.run(
+            # --no-demangle: skips C++ name demangling (slow for large binaries)
+            # --no-inline:   skips DWARF inline expansion (can hang for heavily-optimised C/C++)
+            [perf, 'script', '-i', data_file, '--no-demangle', '--no-inline'],
+            capture_output=True, text=True, timeout=120,
+        )
+        data = _fold_perf_script(script.stdout)
+        if not data.strip():
+            return {
+                'available': False, 'reason': 'no_data',
+                'detail':    'perf collected samples but could not resolve symbols. '
+                             'The binary may lack frame pointers (-fno-omit-frame-pointer) '
+                             'or debug info.',
+            }
+        return {
+            'available': True,
+            'profiler':  'perf',
+            'format':    'folded',
+            'data':      data,
+            'duration':  duration,
+            'pid':       pid,
+            'samples':   _count_samples(data),
+        }
+    except subprocess.TimeoutExpired:
+        return {'available': False, 'reason': 'timeout'}
+    except Exception as e:
+        return {'available': False, 'reason': 'error', 'detail': str(e)[:200]}
+    finally:
+        try:
+            os.unlink(data_file)
+        except Exception:
+            pass
+
+
+def run_profile(pid: int, duration: int = 10) -> dict:
+    """Profile pid: try py-spy for Python processes, fall back to perf for everything else."""
+    if PY_SPY_PATH:
+        result = _run_pyspy_profile(pid, duration)
+        if result.get('available') or result.get('reason') != 'not_python':
+            return result
+        # Not a Python process — fall through to perf
+
+    return _run_perf_profile(pid, duration)
+
+
 def _read_perf_paranoid() -> int:
     try:
         with open('/proc/sys/kernel/perf_event_paranoid') as f:
             return int(f.read().strip())
     except Exception:
         return -99
+
+
+def _read_perf_mlock_kb() -> int:
+    try:
+        with open('/proc/sys/kernel/perf_event_mlock_kb') as f:
+            return int(f.read().strip())
+    except Exception:
+        return -1
 
 
 # ── Resource limit helpers ─────────────────────────────────────────
@@ -455,7 +641,9 @@ def get_process_list(include_system=True, search=''):
                 continue
 
             if search_lower:
-                if search_lower not in name.lower() and search_lower not in full_cmd.lower():
+                if (search_lower not in name.lower()
+                        and search_lower not in full_cmd.lower()
+                        and search_lower not in str(info['pid'])):
                     continue
 
             procs.append({
@@ -1150,16 +1338,43 @@ def check_kernel_settings():
                         'Value -1 grants full access but is not recommended.',
         })
 
+    mlock_kb = _read_perf_mlock_kb()
+    if mlock_kb != -1 and mlock_kb < 4096:
+        warnings.append({
+            'feature':  'Flamegraph profiler — non-Python processes (perf ring buffer)',
+            'setting':  'kernel.perf_event_mlock_kb',
+            'current':  str(mlock_kb),
+            'needed':   '4096 or higher (16384 recommended)',
+            'session':  'sudo sysctl kernel.perf_event_mlock_kb=16384',
+            'permanent': "echo 'kernel.perf_event_mlock_kb = 16384' | sudo tee -a /etc/sysctl.d/99-perfwatch.conf && sudo sysctl -p /etc/sysctl.d/99-perfwatch.conf",
+            'note':     'perf locks ring-buffer memory to prevent data loss. '
+                        'Low values cause "Permission error mapping pages" when attaching to '
+                        'large processes such as browsers. 16384 KB is safe for most workloads.',
+        })
+
     if not PY_SPY_PATH:
         warnings.append({
-            'feature':  'Flamegraph profiler (py-spy)',
+            'feature':  'Flamegraph profiler — Python processes (py-spy)',
             'setting':  'py-spy binary',
             'current':  'not found',
             'needed':   'installed',
             'session':  'pip install py-spy',
             'permanent': 'pip install py-spy   (persists in your Python environment)',
             'note':     'py-spy must be on PATH or at ~/.local/bin/py-spy. '
-                        'Restart PerfWatch after installing.',
+                        'Restart PerfWatch after installing. '
+                        'Non-Python processes will still be profiled via perf if available.',
+        })
+
+    if not shutil.which('perf'):
+        warnings.append({
+            'feature':  'Flamegraph profiler — non-Python processes (perf)',
+            'setting':  'perf binary',
+            'current':  'not found',
+            'needed':   'installed',
+            'session':  'sudo apt install linux-perf',
+            'permanent': 'sudo apt install linux-perf   (or linux-tools-$(uname -r))',
+            'note':     'perf is used as a fallback to profile C, Rust, Go, and other '
+                        'non-Python processes. Python processes use py-spy instead.',
         })
 
     if not warnings:

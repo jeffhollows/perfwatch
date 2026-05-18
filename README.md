@@ -16,6 +16,7 @@ A real-time Linux process performance dashboard. Select any running process, wat
 - [Architecture](#architecture)
 - [Implementation Details](#implementation-details)
 - [Metrics Reference](#metrics-reference)
+- [Flamegraph Profiling](#flamegraph-profiling)
 - [Tutorial: Monitoring a Process](#tutorial-monitoring-a-process)
 - [Tutorial: Using the Stress Tests](#tutorial-using-the-stress-tests)
 - [What to Look For](#what-to-look-for)
@@ -37,6 +38,8 @@ python3 server.py
 ```
 
 No other dependencies. No Flask, no FastAPI, no npm. Pure Python stdlib + psutil.
+
+At startup, PerfWatch checks optional kernel settings and installed tools. If any are missing it prints a warning with the exact commands to fix them and asks whether to continue — you can always start without them and add them later.
 
 ---
 
@@ -73,6 +76,7 @@ Browser  ──GET /──────────────────▶  s
          ──GET /api/metrics?pid=X──▶  SSE stream (process metrics, 2s interval)
          ──GET /api/system──────────▶  SSE stream (system-wide metrics, 2s interval)
          ──GET /api/perf?pid=X──────▶  JSON one-shot perf stat result
+         ──GET /api/profile?pid=X───▶  JSON flamegraph (folded stack format)
          ──GET /api/stressors───────▶  JSON stressor status
          ──POST /api/stressors/start▶  start a stressor subprocess
          ──POST /api/stressors/stop─▶  stop a stressor subprocess
@@ -193,6 +197,50 @@ Stressors are launched as separate `subprocess.Popen` processes so each appears 
 
 ---
 
+## Flamegraph Profiling
+
+Click the **Profile** button (visible when a process is selected) to capture a flamegraph — a visual representation of where the process spends its time, broken down by call stack.
+
+### How it works
+
+PerfWatch uses two profilers depending on the target process:
+
+| Profiler | Used for | Requirement |
+|----------|----------|-------------|
+| **py-spy** | Python processes | `pip install py-spy`, `ptrace_scope=0` |
+| **perf record** | Everything else (C, Rust, Go, Java, native apps) | `perf` installed, `perf_event_paranoid ≤ 1` |
+
+py-spy is tried first. If it cannot identify the target as a Python process, PerfWatch automatically falls back to `perf record` with no user intervention required.
+
+### Reading a flamegraph
+
+- **Width** — proportion of time spent in that function (wider = more time)
+- **Height** — call depth (bottom = entry point, top = leaf/hot function)
+- **Click a frame** — zooms in to show that subtree in full width
+- **Zoom out** — returns to the previous zoom level
+- **Search box** — highlights all frames matching a name pattern
+- **? Guide** — click to expand a full reading guide with tips inline
+
+### Profiler selection and fallbacks
+
+The subtitle below the flamegraph shows which profiler was used and how many samples were collected. A **low-sample warning** appears when fewer than 20 samples/second were collected — this usually means the process was mostly idle or in the kernel where symbols cannot be resolved.
+
+### Sandboxed processes
+
+Some processes cannot be profiled regardless of kernel settings:
+
+- **Snap packages** — AppArmor + seccomp confinement blocks `perf_event_open` for all processes in the snap, including the main browser process
+- **Flatpak apps** — similar namespace isolation
+- **Chromium/Brave renderer and GPU processes** — Chrome's internal sandbox (separate from snap) also blocks perf
+
+When PerfWatch detects this, it shows a clear error message and a `ps` command (with a **Copy** button) to find the unsandboxed parent process you can profile instead.
+
+### perf and inline expansion
+
+For native C/C++ processes (GNOME Shell, system daemons, etc.), PerfWatch runs `perf script --no-inline` to skip DWARF inline expansion. Without this flag, symbol resolution for heavily-optimized binaries can take 5+ minutes. The flag trades inline detail for speed — function names are still correct, inlined call sites just appear collapsed into their parent.
+
+---
+
 ## Tutorial: Monitoring a Process
 
 ### Step 1 — Start the dashboard
@@ -204,9 +252,11 @@ python3 server.py
 
 Open **http://localhost:8765** in your browser.
 
+At startup the server checks kernel settings and prints a warning for any that need attention, then asks whether to continue. You can start without any optional settings — they only affect specific features.
+
 ### Step 2 — Find your process
 
-The left sidebar lists all running processes sorted alphabetically. Use the search box to filter by name or command. Toggle **Hide system processes** to remove root/daemon processes and focus on user processes.
+The left sidebar lists all running processes sorted alphabetically. Use the search box to filter by **name, PID, or command line**. Toggle **Hide system processes** to remove root/daemon processes and focus on user processes.
 
 > **Tip:** The process status badge shows `sleeping`, `running`, `zombie`, etc. Most processes spend most of their time `sleeping` — that is normal. A process is only `running` for the brief microseconds it's actually executing on a CPU. You will rarely see `running` in the list because the snapshot catches it mid-sleep.
 
@@ -220,7 +270,13 @@ Click any process. The main panel populates with live metric cards, updating eve
 - **A sparkline** (on CPU, memory, CPU time, and page fault cards) — 60 samples of history, roughly the last 2 minutes
 - **Show advice & commands** — click to expand plain-English explanations and the exact shell commands to investigate further
 
-### Step 4 — Read the system strip
+### Step 4 — Profile a process (flamegraph)
+
+With a process selected, click the **Profile** button in the top-right toolbar. Choose a duration (5–30 seconds) and click **Start profiling**. A countdown runs, then PerfWatch generates a flamegraph showing exactly where CPU time was spent.
+
+Click any bar to zoom into that subtree. Click **? Guide** to expand an inline reading guide.
+
+### Step 5 — Read the system strip
 
 The thin bar below the header updates every 2 seconds with system-wide data regardless of which process is selected:
 
@@ -237,7 +293,7 @@ PerfWatch ships with ten synthetic stressors so you can observe what each type o
 
 ### From the dashboard
 
-1. Click **Test Stressors** at the top of the left sidebar (expanded by default)
+1. Click **⚗ Test Stressors** at the top of the left sidebar to expand it
 2. Click **Start** next to any stressor
 3. A PID link appears — click it to jump directly to monitoring that stressor process
 4. Watch the relevant metric cards change
@@ -389,13 +445,15 @@ To check if it's installed:
 python3 -c "import psutil; print(psutil.__version__)"
 ```
 
+---
+
 ## Optional System Settings
 
-Two kernel settings unlock additional PerfWatch features. Both are off by default on most Linux distributions as a security precaution. Neither is required — PerfWatch runs fine without them and explains clearly in the UI when a feature is unavailable.
+Several kernel settings and tools unlock additional PerfWatch features. PerfWatch checks all of them at startup and prints exactly what to run if anything is missing. None are required — PerfWatch runs fine without them.
 
-### Flamegraph Profiling — `kernel.yama.ptrace_scope`
+### Flamegraph Profiling (Python) — `kernel.yama.ptrace_scope`
 
-The 🔥 **Profile** button uses [py-spy](https://github.com/benfred/py-spy) to sample call stacks of Python processes. py-spy reads process memory via `ptrace`. When `ptrace_scope=1` (the default), Linux restricts ptrace to parent→child relationships only, which blocks py-spy from attaching to an already-running process.
+The **Profile** button uses [py-spy](https://github.com/benfred/py-spy) to sample call stacks of Python processes. py-spy reads process memory via `ptrace`. When `ptrace_scope=1` (the default), Linux restricts ptrace to parent→child relationships only, blocking py-spy from attaching to an already-running process.
 
 Setting it to `0` allows any process to ptrace any other process **owned by the same user** — root is not required.
 
@@ -409,38 +467,65 @@ cat /proc/sys/kernel/yama/ptrace_scope
 sudo sysctl kernel.yama.ptrace_scope=0
 
 # Make it permanent
-echo 'kernel.yama.ptrace_scope=0' | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
+echo 'kernel.yama.ptrace_scope = 0' | sudo tee /etc/sysctl.d/99-perfwatch.conf
+sudo sysctl -p /etc/sysctl.d/99-perfwatch.conf
 ```
 
-### Hardware Perf Counters — `kernel.perf_event_paranoid`
+### Flamegraph Profiling (native) — `kernel.perf_event_paranoid` + `perf`
 
-The **Perf Counters** card shows IPC, cache miss %, and branch miss % using `perf stat`. When `perf_event_paranoid` is 2 or higher (default on Ubuntu 20.04+), unprivileged access to hardware CPU counters is blocked.
+For non-Python processes (C, Rust, Go, native apps, GNOME Shell, etc.), PerfWatch falls back to `perf record`. Two things are needed:
 
-Setting it to `1` allows unprivileged access to CPU counters while still blocking kernel-mode event tracing.
+1. **`perf` installed:** `sudo apt install linux-perf` (or `linux-tools-$(uname -r)`)
+2. **`perf_event_paranoid ≤ 1`:** allows unprivileged process attachment
 
 ```bash
 # Check current value
 cat /proc/sys/kernel/perf_event_paranoid
-# 4 = fully blocked   2 = default on Ubuntu   1 = unprivileged allowed   -1 = unrestricted
+# 4 = fully blocked   2 = default on Ubuntu   1 = allowed   -1 = unrestricted
 
 # Allow for this session only (resets on reboot)
 sudo sysctl kernel.perf_event_paranoid=1
 
 # Make it permanent
-echo 'kernel.perf_event_paranoid=1' | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
+echo 'kernel.perf_event_paranoid = 1' | sudo tee -a /etc/sysctl.d/99-perfwatch.conf
+sudo sysctl -p /etc/sysctl.d/99-perfwatch.conf
 ```
 
-### Enable Both at Once
+### Flamegraph ring-buffer memory — `kernel.perf_event_mlock_kb`
+
+`perf record` locks ring-buffer memory in RAM to prevent data loss during sampling. The kernel limits how much can be locked. On many systems the default (516 KB) is too low for profiling large processes like desktop apps.
 
 ```bash
-# Apply immediately
-sudo sysctl kernel.yama.ptrace_scope=0 kernel.perf_event_paranoid=1
+# Check current value
+cat /proc/sys/kernel/perf_event_mlock_kb
 
-# Make permanent — appends both lines to /etc/sysctl.conf
-printf 'kernel.yama.ptrace_scope=0\nkernel.perf_event_paranoid=1\n' | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
+# Raise for this session only (resets on reboot)
+sudo sysctl kernel.perf_event_mlock_kb=16384
+
+# Make it permanent
+echo 'kernel.perf_event_mlock_kb = 16384' | sudo tee -a /etc/sysctl.d/99-perfwatch.conf
+sudo sysctl -p /etc/sysctl.d/99-perfwatch.conf
 ```
 
-> **Security note:** These settings apply system-wide, not just to PerfWatch. `ptrace_scope=0` in particular allows any process you run to inspect the memory of your other processes. On a personal dev machine this is generally fine; on a multi-user or internet-exposed server, consider keeping the defaults and running PerfWatch as root only when you need profiling.
+### Hardware Perf Counters — `kernel.perf_event_paranoid`
+
+The **Perf Counters** card shows IPC, cache miss %, and branch miss % using `perf stat`. This requires the same `perf_event_paranoid ≤ 1` setting as native flamegraph profiling — one setting covers both features.
+
+### Enable all at once
+
+```bash
+# Apply immediately (resets on reboot)
+sudo sysctl kernel.yama.ptrace_scope=0 \
+             kernel.perf_event_paranoid=1 \
+             kernel.perf_event_mlock_kb=16384
+
+# Make permanent
+cat <<EOF | sudo tee /etc/sysctl.d/99-perfwatch.conf
+kernel.yama.ptrace_scope = 0
+kernel.perf_event_paranoid = 1
+kernel.perf_event_mlock_kb = 16384
+EOF
+sudo sysctl -p /etc/sysctl.d/99-perfwatch.conf
+```
+
+> **Security note:** These settings apply system-wide, not just to PerfWatch. `ptrace_scope=0` allows any process you run to inspect the memory of your other processes. On a personal dev machine this is generally fine; on a multi-user or internet-exposed server, consider keeping the defaults and running PerfWatch as root only when profiling is needed.

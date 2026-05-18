@@ -45,19 +45,16 @@ def compute_burst(tid):
     # Different threads emphasise different work so the flamegraph branches
     bucket = tid % 3
     if bucket == 0:
-        find_primes(500)
+        find_primes(200)
     elif bucket == 1:
-        max(collatz_steps(n) for n in range(1, 400))
+        max(collatz_steps(n) for n in range(1, 200))
     else:
-        sort_work(1000)
+        sort_work(400)
 
 
 def worker(tid):
     while not stop_event.is_set():
-        # Do several bursts before sleeping so work dominates over sleep in profiles
-        for _ in range(5):
-            compute_burst(tid)
-        time.sleep(random.uniform(0.001, 0.005))
+        compute_burst(tid)
 
 
 def run():

@@ -19,25 +19,34 @@ stop_event = threading.Event()
 signal.signal(signal.SIGTERM, lambda *_: stop_event.set())
 signal.signal(signal.SIGINT,  lambda *_: stop_event.set())
 
-print(f"[syscall] PID {os.getpid()} — hammering syscalls to drive sys% high  (Ctrl+C to stop)")
 
-cycle = 0
-try:
-    while not stop_event.is_set():
-        t0 = time.perf_counter()
-        for _ in range(BATCH):
-            r, w = os.pipe()
-            os.close(r)
-            os.close(w)
-        elapsed = time.perf_counter() - t0
-        # Sleep long enough that active/(active+sleep) ≈ TARGET_CPU
-        sleep_for = elapsed * (1.0 - TARGET_CPU) / TARGET_CPU
-        if sleep_for > 0:
-            stop_event.wait(sleep_for)
-        cycle += 1
-        if cycle % 20 == 0:
-            print(f"[syscall] {cycle * BATCH:,} syscalls so far", end="\r")
-except KeyboardInterrupt:
-    pass
+def run_batch():
+    for _ in range(BATCH):
+        r, w = os.pipe()
+        os.close(r)
+        os.close(w)
 
-print(f"\n[syscall] stopped after {cycle} cycles  ({cycle * BATCH:,} syscall pairs).")
+
+def duty_cycle_sleep(elapsed):
+    sleep_for = elapsed * (1.0 - TARGET_CPU) / TARGET_CPU
+    if sleep_for > 0:
+        stop_event.wait(sleep_for)
+
+
+def run():
+    print(f"[syscall] PID {os.getpid()} — hammering syscalls to drive sys% high  (Ctrl+C to stop)")
+    cycle = 0
+    try:
+        while not stop_event.is_set():
+            t0 = time.perf_counter()
+            run_batch()
+            duty_cycle_sleep(time.perf_counter() - t0)
+            cycle += 1
+            if cycle % 20 == 0:
+                print(f"[syscall] {cycle * BATCH:,} syscalls so far", end="\r")
+    except KeyboardInterrupt:
+        pass
+    print(f"\n[syscall] stopped after {cycle} cycles  ({cycle * BATCH:,} syscall pairs).")
+
+
+run()
