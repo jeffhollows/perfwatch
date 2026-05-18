@@ -2096,6 +2096,12 @@ function startSystemSSE() {
       renderSystemStrip(sysMetrics);
     } catch(_) {}
   };
+  sysSSE.onerror = () => {
+    sysSSE.close();
+    sysSSE = null;
+    // Reconnect after 3 seconds — server may have restarted
+    setTimeout(startSystemSSE, 3000);
+  };
 }
 
 function renderSystemStrip(sys) {
@@ -2316,6 +2322,7 @@ function renderStressors(stressors) {
 // ── Flamegraph modal ──────────────────────────────────────────────
 
 let fgRenderer  = null;
+let fgResizeObs = null;
 let fgDuration  = 10;
 let fgCdTimer   = null;
 
@@ -2553,12 +2560,14 @@ function showFgGraph(data) {
     $('fg-toolbar').style.display = 'none';
     $('fg-subtitle').textContent  = '';
     fgRenderer = null;
+    if (fgResizeObs) { fgResizeObs.disconnect(); fgResizeObs = null; }
     showFgStart();
   };
   fgSyncZoomBtn();
 
-  // Reflow canvas on container resize
-  new ResizeObserver(() => {
+  // Reflow canvas on container resize — disconnect any previous observer first
+  if (fgResizeObs) fgResizeObs.disconnect();
+  fgResizeObs = new ResizeObserver(() => {
     if (!fgRenderer) return;
     const w = body.clientWidth;
     if (Math.abs(w - canvas.width) > 2) {
@@ -2566,7 +2575,8 @@ function showFgGraph(data) {
       fgRenderer._layout();
       fgRenderer.render();
     }
-  }).observe(body);
+  });
+  fgResizeObs.observe(body);
 }
 
 function fgSyncZoomBtn() {

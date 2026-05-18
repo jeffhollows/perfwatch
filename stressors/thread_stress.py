@@ -3,7 +3,7 @@
 Thread Stressor — spawns N threads that do light work, showing high thread count
 and elevated involuntary context switches.
 
-Safety: capped at 150 threads, each thread sleeps between bursts.
+Safety: capped at 150 threads, each thread yields 20 ms between bursts.
 """
 import os, time, signal, sys, threading, random, math
 
@@ -55,6 +55,7 @@ def compute_burst(tid):
 def worker(tid):
     while not stop_event.is_set():
         compute_burst(tid)
+        stop_event.wait(0.02)  # brief yield — prevents all 100 threads from saturating every core
 
 
 def run():

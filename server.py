@@ -75,25 +75,35 @@ def start_stressor(name):
         return {'started': True, 'name': name, 'pid': p.pid}
 
 
+def _reap(proc):
+    """Terminate a stressor and wait for it to avoid zombie processes."""
+    try:
+        proc.terminate()
+        proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+    except Exception:
+        pass
+
+
 def stop_stressor(name):
     if name not in STRESSOR_DEFS:
         return {'error': f'Unknown stressor: {name}'}
     with _stressor_lock:
-        proc = _stressor_procs.get(name)
+        proc = _stressor_procs.pop(name, None)
         if not proc or proc.poll() is not None:
-            _stressor_procs.pop(name, None)
             return {'error': f'{name} is not running'}
-        proc.terminate()
-        _stressor_procs.pop(name, None)
+        _reap(proc)
         return {'stopped': True, 'name': name}
 
 
 def stop_all_stressors():
     with _stressor_lock:
-        for proc in _stressor_procs.values():
-            if proc.poll() is None:
-                proc.terminate()
+        procs = list(_stressor_procs.values())
         _stressor_procs.clear()
+    for proc in procs:
+        _reap(proc)
 
 
 # ── System-wide rate tracking ──────────────────────────────────────
@@ -151,10 +161,10 @@ def collect_system_metrics():
             'status':   cpu_status,
             'load_severity': load_sev,
             'advice':   (
-                ['iowait is high — CPUs are idle waiting on disk. Check per-disk stats below.']
-                if iowait > 20 else
                 [f'Steal time {steal:.0f}% — the hypervisor is taking CPU from this VM. Contact your cloud provider or resize.']
-                if steal > 10 else []
+                if steal > 10 else
+                ['iowait is high — CPUs are idle waiting on disk. Check per-disk stats below.']
+                if iowait > 20 else []
             ),
             'label': 'System CPU',
             'description': (
@@ -275,7 +285,7 @@ def run_perf_stat(pid: int) -> dict:
         output = result.stderr
         if 'Access to performance monitoring' in output:
             paranoid = _read_perf_paranoid()
-            target = 0 if paranoid <= 1 else 1
+            target = max(paranoid - 1, 0)
             return {
                 'available': False,
                 'reason':    'blocked',
@@ -356,6 +366,11 @@ def _strip_pyspy_noise(folded: str) -> str:
         # frames[0] is always the thread name; skip it and filter bootstrap noise
         cleaned = [f for f in frames[1:]
                    if f.split(' (')[0].strip() not in _PYSPY_NOISE]
+        if not cleaned and len(frames) > 1:
+            # All frames were noise — keep the innermost real frame so the sample
+            # is not silently dropped (which would make the sample count disagree
+            # with what the flamegraph renders).
+            cleaned = frames[1:2]
         if cleaned:
             lines.append(';'.join(cleaned) + ' ' + count)
     return '\n'.join(lines)
@@ -450,7 +465,9 @@ def _fold_perf_script(text: str) -> str:
             parts = line.strip().split()
             if len(parts) >= 2:
                 sym = parts[1].split('+')[0]
-                if sym and sym != '[unknown]':
+                if sym:
+                    # Keep [unknown] as a placeholder so stack depth is preserved;
+                    # dropping it mid-stack would split one tower into two separate ones.
                     current.append(sym)
         # else: sample header line — stack resets on next blank line
     if current:
@@ -733,7 +750,7 @@ def collect_metrics(pid, proc=None):
         # File descriptors
         try:
             fd_count = proc.num_fds()
-            fd_limit = resource.getrlimit(resource.RLIMIT_NOFILE)[0]
+            fd_limit = proc.rlimit(resource.RLIMIT_NOFILE)[0]
             metrics['fds'] = {
                 'value': fd_count,
                 'limit': fd_limit,
@@ -883,10 +900,15 @@ def collect_metrics(pid, proc=None):
     # Page faults — direct indicator of swap pressure on this specific process
     try:
         with open(f'/proc/{pid}/stat') as f:
-            fields = f.read().split()
+            raw = f.read()
+        # The second field (comm) is wrapped in parens and may contain spaces/parens.
+        # Split from the last ')' to avoid shifting all subsequent field indices.
+        after_comm = raw[raw.rfind(')') + 1:].split()
+        # after_comm[0]=state, [7]=minflt (field 10), [9]=majflt (field 12) — zero-indexed from here
+        fields = after_comm
         metrics['page_faults'] = {
-            'minor': int(fields[9]),
-            'major': int(fields[11]),
+            'minor': int(fields[7]),
+            'major': int(fields[9]),
             'label': 'Page Faults',
             'description': (
                 'Minor faults are served from the page cache in RAM (fast, normal). '
@@ -1260,6 +1282,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Accel-Buffering', 'no')
         self.end_headers()
 
+        # Short socket timeout so the write fails quickly when the client
+        # closes the connection (e.g. switching to another process), preventing
+        # thread accumulation.
+        try:
+            self.connection.settimeout(5)
+        except Exception:
+            pass
+
         # Create one Process object and prime cpu_percent on it.
         # cpu_percent(interval=None) always returns 0.0 on the first call
         # to a new object — reusing the same object gives correct readings.
@@ -1281,7 +1311,7 @@ class Handler(BaseHTTPRequestHandler):
                 if metrics is None:
                     break
                 time.sleep(2)
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, OSError):
             pass
 
     def _sse_system(self):
@@ -1292,13 +1322,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Accel-Buffering', 'no')
         self.end_headers()
         try:
+            self.connection.settimeout(5)
+        except Exception:
+            pass
+        try:
             while True:
                 metrics = collect_system_metrics()
                 payload = json.dumps(metrics)
                 self.wfile.write(f'data: {payload}\n\n'.encode())
                 self.wfile.flush()
                 time.sleep(2)
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, OSError):
             pass
 
 
