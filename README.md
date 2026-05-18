@@ -201,6 +201,8 @@ Stressors are launched as separate `subprocess.Popen` processes so each appears 
 
 Click the **Profile** button (visible when a process is selected) to capture a flamegraph — a visual representation of where the process spends its time, broken down by call stack.
 
+![Flamegraph of the thread stressor showing call stack breakdown with tooltip](screenshots/flamegraph_thread_stress.png)
+
 ### How it works
 
 PerfWatch uses two profilers depending on the target process:
