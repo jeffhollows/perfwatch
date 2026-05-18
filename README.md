@@ -203,6 +203,10 @@ Click the **Profile** button (visible when a process is selected) to capture a f
 
 ![Flamegraph of the thread stressor showing call stack breakdown with tooltip](screenshots/flamegraph_thread_stress.png)
 
+The second screenshot shows a 30-second `perf record` profile of GNOME Shell — a native C + GJS process. The wide base frames are the GLib event loop; the branching towers are compositor, renderer, and input-handling paths. The `[unknown]` frames are kernel functions where debug symbols are not installed.
+
+![Flamegraph of GNOME Shell profiled with perf showing compositor call tree](screenshots/flamegraph_gnome_shell.png)
+
 ### How it works
 
 PerfWatch uses two profilers depending on the target process:
@@ -355,7 +359,7 @@ python3 run_stress.py all           # start all ten
 
 **Cards:** Open File Descriptors, Open Files (lsof)
 
-- FD count **growing over time** with no corresponding growth in connections or file operations = leak. The process opens files or sockets and never calls `close()`.
+- FD count **growing over time** with no corresponding growth in connections or file operations = leak. The process opens files or sockets and never calls `close()`. The limit shown is the monitored process's own soft limit, not the dashboard's.
 - When the bar reaches 80%+ of the limit, new `open()` / `connect()` calls will fail with `EMFILE: Too many open files`. The application may silently start failing.
 - Use `lsof -p <pid> | awk '{print $5}' | sort | uniq -c | sort -rn` to find what type of descriptor is leaking (REG = file, IPv4/IPv6 = socket, FIFO = pipe).
 
@@ -416,7 +420,7 @@ The thin bar at the top of the page shows system-wide health at a glance.
 | **Memory Hog** | 256 MB alloc/hold/release cycle | Memory, System Memory | ✓ Checks free RAM, pauses if low |
 | **Memory Leak Sim** | +8 MB every 3s, never freed, cap 512 MB | Memory sparkline (upward trend) | ✓ Caps at 512 MB, checks free RAM |
 | **Disk I/O** | 64 MB write+read cycle in /tmp | Disk I/O (logical high, physical ~0) | ✓ Writes to RAM (tmpfs), no disk wear |
-| **Thread Storm** | 100 concurrent threads, light work | Threads, Context Switches | ✓ Capped at 150 threads |
+| **Thread Storm** | 100 concurrent threads, light CPU bursts with 20 ms yield | Threads, Context Switches | ✓ Capped at 150 threads |
 | **FD Leak Sim** | Holds 350 /dev/null file handles | Open File Descriptors | ✓ No disk/memory consumed |
 | **Connection Flood** | 150 loopback TCP connections | Network Connections | ✓ Loopback only, no external traffic |
 | **Syscall Hammer** | 5000 pipe open/close per burst (~60% CPU) | CPU Time Breakdown (sys% spikes) | ✓ Duty-cycle throttled |

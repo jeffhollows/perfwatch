@@ -10,8 +10,7 @@ import os, time, signal, sys, math
 TARGET_PCT = float(sys.argv[1]) if len(sys.argv) > 1 else 80.0
 os.nice(10)
 
-WORK_MS  = TARGET_PCT / 100.0 * 0.1
-SLEEP_MS = 0.1 - WORK_MS
+TARGET_RATIO = TARGET_PCT / 100.0
 
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
@@ -64,10 +63,14 @@ def run():
     print(f"[cpu_stress] PID {os.getpid()} — targeting {TARGET_PCT:.0f}% on one core  (Ctrl+C to stop)")
     try:
         while True:
-            deadline = time.perf_counter() + WORK_MS
-            while time.perf_counter() < deadline:
-                work_cycle()
-            time.sleep(max(SLEEP_MS, 0))
+            t0 = time.perf_counter()
+            work_cycle()
+            elapsed = time.perf_counter() - t0
+            # Adaptive sleep: scale by how long the work actually took so the
+            # duty cycle stays correct even when the system is under load.
+            sleep_for = elapsed * (1.0 - TARGET_RATIO) / TARGET_RATIO
+            if sleep_for > 0:
+                time.sleep(sleep_for)
     except KeyboardInterrupt:
         print("\n[cpu_stress] stopped.")
 
