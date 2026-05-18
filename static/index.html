@@ -924,6 +924,44 @@ input:focus { border-color: var(--accent); }
 
 .fg-body { flex: 1; overflow: auto; background: var(--bg); position: relative; }
 
+/* Guide panel */
+.fg-guide {
+  display: none;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 20px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  max-height: 280px;
+}
+.fg-guide.open { display: block; }
+.fg-guide-btn.active { border-color: var(--accent); color: var(--accent); }
+.fg-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+}
+.fg-guide-heading {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-dimmer); margin-bottom: 8px;
+}
+.fg-guide-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.fg-guide-list li {
+  font-size: 12px; color: var(--text-dim); line-height: 1.55;
+  display: flex; align-items: flex-start; gap: 7px;
+}
+.fg-guide-list strong { color: var(--text); font-weight: 600; }
+.fg-guide-list em { color: var(--text); font-style: normal; font-weight: 500; }
+.fg-guide-pill {
+  display: inline-block; flex-shrink: 0;
+  font-size: 10px; font-weight: 700; font-family: var(--font);
+  padding: 1px 6px; border-radius: 3px; color: rgba(255,255,255,0.85);
+  margin-top: 1px;
+}
+
 .fg-canvas { display: block; }
 
 /* Start panel */
@@ -1056,7 +1094,40 @@ input:focus { border-color: var(--accent); }
     <button class="fg-tbtn" id="fg-zoom-out" disabled>← Zoom out</button>
     <button class="fg-tbtn" id="fg-reset">Reset zoom</button>
     <button class="fg-tbtn" id="fg-again">Profile again</button>
+    <button class="fg-tbtn fg-guide-btn" id="fg-guide-toggle">? Guide</button>
     <span class="fg-stats" id="fg-stats"></span>
+  </div>
+  <div class="fg-guide" id="fg-guide">
+    <div class="fg-guide-grid">
+      <div class="fg-guide-section">
+        <div class="fg-guide-heading">How to read</div>
+        <ul class="fg-guide-list">
+          <li><span class="fg-guide-pill" style="background:hsl(200,68%,36%)">width</span> Width = time spent. Wider bar = more CPU time consumed by that function and everything it calls.</li>
+          <li><span class="fg-guide-pill" style="background:hsl(90,68%,28%)">depth</span> Each row is one level deeper in the call stack. The root bar is at the top; leaf functions are at the bottom.</li>
+          <li><span class="fg-guide-pill" style="background:#444">color</span> Colors are decorative — assigned by function name, not meaning. They help distinguish adjacent frames, nothing more.</li>
+          <li><span class="fg-guide-pill" style="background:hsl(40,68%,36%)">click</span> Click any frame to zoom in and focus on that subtree. Use <em>Zoom out</em> or <em>Reset zoom</em> to step back out.</li>
+          <li><span class="fg-guide-pill" style="background:hsl(270,68%,36%)">search</span> Type in the search box to highlight matching frames across the entire graph.</li>
+        </ul>
+      </div>
+      <div class="fg-guide-section">
+        <div class="fg-guide-heading">What to look for</div>
+        <ul class="fg-guide-list">
+          <li><strong>Wide bars near the top</strong> — expensive code paths. The wider, the more time your program spends going through that function.</li>
+          <li><strong>Flat plateau at the bottom</strong> — a leaf function doing heavy self-work (no further calls). Common culprits: tight loops, string ops, regex, JSON parsing.</li>
+          <li><strong>Many thin slivers</strong> — time is spread across lots of small functions. Usually fine, but can indicate excessive abstraction or serialization overhead.</li>
+          <li><strong>One tower dominating</strong> — a single code path consumes most CPU. Good starting point for optimization.</li>
+          <li><strong>Unexpected frames</strong> — GC, serialization, or logging functions appearing wide often reveal hidden costs.</li>
+        </ul>
+      </div>
+      <div class="fg-guide-section">
+        <div class="fg-guide-heading">Hover tooltip</div>
+        <ul class="fg-guide-list">
+          <li><strong>%</strong> — percentage of all samples that passed through this frame (inclusive of children).</li>
+          <li><strong>self %</strong> — time spent in this function alone, excluding callees. High self % = this function itself is the bottleneck.</li>
+          <li>Frames narrower than ~2 px are still clickable to zoom — use zoom to explore crowded areas.</li>
+        </ul>
+      </div>
+    </div>
   </div>
   <div class="fg-body" id="fg-body"></div>
 </div>
@@ -2168,6 +2239,8 @@ function openFgModal() {
   $('fg-title').textContent    = `🔥 Flamegraph — ${selectedProc ? selectedProc.name : ''} (PID ${selectedPid})`;
   $('fg-subtitle').textContent = '';
   $('fg-toolbar').style.display = 'none';
+  $('fg-guide').classList.remove('open');
+  $('fg-guide-toggle').classList.remove('active');
   $('fg-overlay').classList.add('open');
   showFgStart();
 }
@@ -2176,6 +2249,13 @@ function closeFgModal() {
   $('fg-overlay').classList.remove('open');
   if (fgCdTimer) { clearInterval(fgCdTimer); fgCdTimer = null; }
 }
+
+$('fg-guide-toggle').addEventListener('click', () => {
+  const guide = $('fg-guide');
+  const btn   = $('fg-guide-toggle');
+  const open  = guide.classList.toggle('open');
+  btn.classList.toggle('active', open);
+});
 
 $('fg-close').addEventListener('click', closeFgModal);
 $('fg-overlay').addEventListener('click', e => { if (e.target === $('fg-overlay')) closeFgModal(); });
@@ -2412,7 +2492,7 @@ class FlamegraphRenderer {
         ctx.strokeRect(f.x + 0.5, y + 0.5, f.width - 1, this.FRAME_H - 1);
       }
 
-      if (f.width >= 16) {
+      if (f.width >= 16 && !isRoot) {
         ctx.fillStyle    = dimmed ? 'rgba(255,255,255,0.18)' : matched ? '#000' : 'rgba(255,255,255,0.9)';
         ctx.font         = '500 11px "SF Mono","Fira Code",monospace';
         ctx.textBaseline = 'middle';
@@ -2445,7 +2525,7 @@ class FlamegraphRenderer {
   _hue(name) {
     let h = 5381;
     for (let i = 0; i < name.length; i++) h = ((h << 5) + h) ^ name.charCodeAt(i);
-    return (Math.abs(h) % 48) + 6; // warm red/orange 6–54
+    return Math.abs(h) % 360;
   }
 
   _coords(e) {
@@ -2483,8 +2563,13 @@ class FlamegraphRenderer {
       const self = f.value - [...f.node.children.values()].reduce((s,c) => s + c.value, 0);
       const sp   = (self / this.totalSamples * 100).toFixed(1);
       this.tip.style.display = 'block';
-      this.tip.style.left    = (e.clientX + 14) + 'px';
-      this.tip.style.top     = (e.clientY + 10) + 'px';
+      // Position tip, then clamp so it stays inside the viewport
+      const tw = this.tip.offsetWidth  || 260;
+      const th = this.tip.offsetHeight || 60;
+      const tx = (e.clientX + 14 + tw > window.innerWidth)  ? e.clientX - tw - 8 : e.clientX + 14;
+      const ty = (e.clientY + 10 + th > window.innerHeight) ? e.clientY - th - 8 : e.clientY + 10;
+      this.tip.style.left = tx + 'px';
+      this.tip.style.top  = ty + 'px';
       this.tip.innerHTML =
         `<span class="fg-tip-name">${esc(f.name)}</span>` +
         `<span class="fg-tip-pct">${pct}%</span> of samples (${f.value.toLocaleString()})` +

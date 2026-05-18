@@ -275,11 +275,12 @@ def run_perf_stat(pid: int) -> dict:
         output = result.stderr
         if 'Access to performance monitoring' in output or 'not supported' in output.lower():
             paranoid = _read_perf_paranoid()
+            target = 0 if paranoid <= 1 else 1
             return {
                 'available': False,
                 'reason':    'blocked',
                 'paranoid':  paranoid,
-                'fix':       f'sudo sysctl kernel.perf_event_paranoid=1   (currently {paranoid})',
+                'fix':       f'sudo sysctl kernel.perf_event_paranoid={target}   (currently {paranoid})',
             }
 
         counters = {}
@@ -347,8 +348,7 @@ def run_profile(pid: int, duration: int = 10) -> dict:
              '--pid', str(pid),
              '--duration', str(duration),
              '--format', 'raw',
-             '--output', tmp,
-             '--nonblocking'],
+             '--output', tmp],
             capture_output=True, text=True,
             timeout=duration + 15,
         )
@@ -373,7 +373,7 @@ def run_profile(pid: int, duration: int = 10) -> dict:
 
         if not data.strip():
             return {'available': False, 'reason': 'no_data',
-                    'detail': 'py-spy ran but collected no samples — process may have been idle.'}
+                    'detail': 'py-spy ran but collected no samples — try a longer duration or verify the process is still running.'}
 
         sample_count = 0
         for line in data.strip().split('\n'):
@@ -1115,9 +1115,83 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     allow_reuse_address = True
 
 
+def check_kernel_settings():
+    warnings = []
+
+    ptrace = _read_ptrace_scope()
+    if ptrace == -1:
+        pass  # yama not present; ptrace unrestricted by default
+    elif ptrace > 0:
+        warnings.append({
+            'feature':  'Flamegraph profiler (py-spy)',
+            'setting':  'kernel.yama.ptrace_scope',
+            'current':  str(ptrace),
+            'needed':   '0',
+            'session':  'sudo sysctl kernel.yama.ptrace_scope=0',
+            'permanent': "echo 'kernel.yama.ptrace_scope = 0' | sudo tee /etc/sysctl.d/99-perfwatch.conf && sudo sysctl -p /etc/sysctl.d/99-perfwatch.conf",
+            'note':     'Allows py-spy to attach to processes owned by other users. '
+                        'Setting to 0 disables Yama ptrace restrictions system-wide; '
+                        'revert with: sudo sysctl kernel.yama.ptrace_scope=1',
+        })
+
+    paranoid = _read_perf_paranoid()
+    if paranoid == -99:
+        pass  # perf_event not available in this kernel
+    elif paranoid > 1:
+        warnings.append({
+            'feature':  'Perf Counters card',
+            'setting':  'kernel.perf_event_paranoid',
+            'current':  str(paranoid),
+            'needed':   '1 or lower',
+            'session':  'sudo sysctl kernel.perf_event_paranoid=1',
+            'permanent': "echo 'kernel.perf_event_paranoid = 1' | sudo tee -a /etc/sysctl.d/99-perfwatch.conf && sudo sysctl -p /etc/sysctl.d/99-perfwatch.conf",
+            'note':     'Value 1 allows unprivileged users to read CPU performance counters. '
+                        'Value 2 (default on many distros) blocks this. '
+                        'Value -1 grants full access but is not recommended.',
+        })
+
+    if not PY_SPY_PATH:
+        warnings.append({
+            'feature':  'Flamegraph profiler (py-spy)',
+            'setting':  'py-spy binary',
+            'current':  'not found',
+            'needed':   'installed',
+            'session':  'pip install py-spy',
+            'permanent': 'pip install py-spy   (persists in your Python environment)',
+            'note':     'py-spy must be on PATH or at ~/.local/bin/py-spy. '
+                        'Restart PerfWatch after installing.',
+        })
+
+    if not warnings:
+        print('  All optional kernel settings OK.')
+        return True
+
+    W = '\033[93m'  # yellow
+    R = '\033[0m'
+    for w in warnings:
+        print(f"{W}  [WARN] Feature affected : {w['feature']}{R}")
+        print(f"         Setting           : {w['setting']}")
+        print(f"         Current value     : {w['current']}  (need {w['needed']})")
+        print(f"         Session-only fix  : {w['session']}")
+        print(f"         Permanent fix     : {w['permanent']}")
+        print(f"         Note              : {w['note']}")
+        print()
+
+    try:
+        answer = input('Some features are unavailable. Start anyway? [y/N] ').strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+    return answer in ('y', 'yes')
+
+
 if __name__ == '__main__':
-    server = ThreadedHTTPServer(('0.0.0.0', PORT), Handler)
     print(f'PerfWatch  →  http://localhost:{PORT}')
+    print('Checking optional kernel settings…')
+    if not check_kernel_settings():
+        print('Exiting. Update the settings above and restart PerfWatch.')
+        sys.exit(0)
+    server = ThreadedHTTPServer(('0.0.0.0', PORT), Handler)
     print('Press Ctrl+C to stop.\n')
     try:
         server.serve_forever()

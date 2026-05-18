@@ -22,24 +22,38 @@ stop_event = threading.Event()
 signal.signal(signal.SIGTERM, lambda *_: stop_event.set())
 signal.signal(signal.SIGINT,  lambda *_: stop_event.set())
 
-print(f"[leak] PID {os.getpid()} — simulating a memory leak  (Ctrl+C to stop)")
-print(f"[leak] +{CHUNK_MB} MB every {STEP_SECS}s up to {MAX_MB} MB cap")
+leaked = []   # intentionally never cleared until stop
 
-leaked    = []   # intentionally never cleared until stop
-total_mb  = 0
 
-try:
-    while not stop_event.is_set() and total_mb < MAX_MB:
+def allocate_chunk():
+    chunk = bytearray(CHUNK_MB * 1024 * 1024)
+    # Touch every 4 KB page so the OS commits physical frames now
+    for i in range(0, len(chunk), 4096):
+        chunk[i] = 0xAB
+    return chunk
+
+
+def wait_for_memory(total_mb):
+    while not stop_event.is_set():
         free_mb = psutil.virtual_memory().available // (1024 * 1024)
-        if free_mb < 300:
-            print(f"[leak] Low RAM ({free_mb} MB free) — pausing allocation")
-            stop_event.wait(10)
-            continue
+        if free_mb >= 300:
+            return free_mb
+        print(f"[leak] Low RAM ({free_mb} MB free) — pausing allocation")
+        stop_event.wait(10)
+    return None
 
-        chunk = bytearray(CHUNK_MB * 1024 * 1024)
-        # Touch every 4 KB page so the OS commits physical frames now
-        for i in range(0, len(chunk), 4096):
-            chunk[i] = 0xAB
+
+def run_leak():
+    total_mb = 0
+    print(f"[leak] PID {os.getpid()} — simulating a memory leak  (Ctrl+C to stop)")
+    print(f"[leak] +{CHUNK_MB} MB every {STEP_SECS}s up to {MAX_MB} MB cap")
+
+    while not stop_event.is_set() and total_mb < MAX_MB:
+        free_mb = wait_for_memory(total_mb)
+        if free_mb is None:
+            break
+
+        chunk = allocate_chunk()
         leaked.append(chunk)
         total_mb += CHUNK_MB
         print(f"[leak] Holding {total_mb} MB  ({free_mb} MB system RAM free)")
@@ -49,6 +63,9 @@ try:
         print(f"[leak] Cap reached ({MAX_MB} MB). Holding until stopped.")
         stop_event.wait()
 
+
+try:
+    run_leak()
 except KeyboardInterrupt:
     pass
 
